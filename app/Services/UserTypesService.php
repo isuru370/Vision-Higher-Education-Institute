@@ -9,10 +9,6 @@ use Exception;
 
 class UserTypesService
 {
-/* ------------------------------------------------------------
-     | API ENDPOINTS (RETURN JSON - FOR WEB & MOBILE)
-     |------------------------------------------------------------ */
-
     /**
      * Get all user types (for both web and mobile)
      */
