@@ -8,13 +8,13 @@ services:
     container_name: laravel_app
     restart: always
     ports:
-      - '8006:80'
+      - '8008:80'
     volumes:
       - storage_volume:/var/www/html/storage
       - uploads_volume:/var/www/html/public/uploads
     environment:
       - APP_ENV=production
-      - APP_URL=https://edu.nexorait.lk
+      - APP_URL=https://vision-phpmyadmin.nexorait.lk
       - QUEUE_CONNECTION=database
     command: >
       sh -c "
@@ -34,7 +34,7 @@ services:
       - uploads_volume:/var/www/html/public/uploads
     environment:
       - APP_ENV=production
-      - APP_URL=https://edu.nexorait.lk
+      - APP_URL=https://vision-phpmyadmin.nexorait.lk
       - QUEUE_CONNECTION=database
     command: >
       sh -c "
