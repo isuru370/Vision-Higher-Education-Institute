@@ -106,7 +106,7 @@
             </p>
 
             <p>Best regards,<br>
-                <strong>YES EDUCATION</strong><br>
+                <strong>VISION ACADEMY OF HIGHER EDUCATION</strong><br>
                 Accounts Department
             </p>
         </div>

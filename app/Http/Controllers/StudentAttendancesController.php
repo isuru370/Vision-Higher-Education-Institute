@@ -50,9 +50,9 @@ class StudentAttendancesController extends Controller
         return $this->attendanceService->attendanceRecoadDelete($id);
     }
 
-        public function getStudentAttendance($studentId,$classCategoryHasStudentClassId)
+    public function getStudentAttendance($studentId, $classCategoryHasStudentClassId)
     {
-        return $this->attendanceService->getStudentAttendances($studentId,$classCategoryHasStudentClassId);
+        return $this->attendanceService->getStudentAttendances($studentId, $classCategoryHasStudentClassId);
     }
 
     public function storeAttendance(Request $request)

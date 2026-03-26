@@ -867,7 +867,6 @@
                     }
                 },
 
-
                 formatMonthYearForURL(monthYear) {
                     const parts = monthYear.split(' ');
                     if (parts.length === 2) {
@@ -1830,6 +1829,7 @@
                 if (isPrintingEnabled) {
                     printMessage = '<br>• Salary slip will be printed';
                 }
+
 
                 const featuresMessage = isPrintingEnabled
                     ? `After payment:${printMessage}${emailMessage}`

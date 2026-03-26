@@ -321,26 +321,7 @@ class StudentAttendanceService
                     $tuteMarked = true;
                 }
             }
-
-            // ✅ SMS sending via Job queue
-            $childInfo = StudentStudentStudentClass::with([
-                'student',
-                'studentClass',
-                'classCategoryHasStudentClass.classCategory'
-            ])->where('id', $studentClassId)->first();
-
-            if ($childInfo) {
-                $guardianNumber = $request->guardian_mobile;
-                $studentName = $childInfo->student->initial_name ?? '';
-                $className = $childInfo->studentClass->class_name ?? '';
-                $categoryName = optional($childInfo->classCategoryHasStudentClass->classCategory)->category_name ?? '';
-
-                $message = "Attendance marked for {$studentName} ({$className} - {$categoryName}) on {$date}. Thank you.";
-
-                // Dispatch SMS job async
-                SendPaymentSms::dispatch($guardianNumber, $message)->onQueue('sms');
-            }
-
+            
             return response()->json([
                 'status' => 'success',
                 'message' => 'Attendance marked successfully',

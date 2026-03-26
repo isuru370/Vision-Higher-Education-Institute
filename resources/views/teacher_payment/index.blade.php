@@ -571,7 +571,7 @@
                                 <td class="py-1 text-center">
                                     <div class="btn-group btn-group-sm" role="group">
                                         <a href="${API_ENDPOINTS.viewTeacher(teacher.teacher_id)}" 
-                                           class="btn btn-info btn-sm"  title="View Details">
+                                           class="btn btn-info btn-sm" title="View Details">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                         ${showPayButton ? `

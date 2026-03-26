@@ -411,4 +411,5 @@ Route::middleware('auth:sanctum')->group(function () {
             ->where('yearMonth', '[0-9]{4}-[0-9]{2}');
         Route::get('/test/{yearMonth}', [LedgerSummaryController::class, 'testMonth']);
     });
+
 });

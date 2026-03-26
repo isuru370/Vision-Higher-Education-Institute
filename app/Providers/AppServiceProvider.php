@@ -10,6 +10,7 @@ use App\Services\ClassCategoryHasStudentService;
 use App\Services\ClassCategoryService;
 use App\Services\ClassHallsService;
 use App\Services\ClassRoomService;
+use App\Services\CourseService;
 use App\Services\ExamService;
 use App\Services\GradeService;
 use App\Services\ImageUploadService;
@@ -27,6 +28,7 @@ use App\Services\ReportService;
 use App\Services\StudentAdmissionPaymentService;
 use App\Services\StudentClassSeparateService;
 use App\Services\StudentIdCardService;
+use App\Services\StudentRegistrationService;
 use App\Services\StudentService;
 use App\Services\StudentStudentStudentClassService;
 use App\Services\SubjectService;
@@ -145,6 +147,12 @@ class AppServiceProvider extends ServiceProvider
         });
         $this->app->bind(StudentResultsService::class, function ($app) {
             return new StudentResultsService();
+        });
+        $this->app->bind(CourseService::class, function ($app) {
+            return new CourseService();
+        });
+        $this->app->bind(StudentRegistrationService::class, function ($app) {
+            return new StudentRegistrationService();
         });
     }
 

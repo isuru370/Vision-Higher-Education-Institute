@@ -22,7 +22,7 @@
 
         <p>If you did not request this, please ignore this email.</p>
 
-        <p>Thank you,<br>YES EDUCATION</p>
+        <p>Thank you,<br>VISION ACADEMY OF HIGHER EDUCATION</p>
     </div>
 </body>
 </html>
