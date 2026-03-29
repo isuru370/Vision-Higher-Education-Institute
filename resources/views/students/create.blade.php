@@ -617,10 +617,10 @@
             e.preventDefault();
 
             // Validate image
-            if (!studentImageUrl) {
-                showAlert('Please upload or select a student image', 'warning');
-                return;
-            }
+            // if (!studentImageUrl) {
+            //     showAlert('Please upload or select a student image', 'warning');
+            //     return;
+            // }
 
             // Validate temporary QR code
             const tempQRCode = document.querySelector('input[name="temporary_qr_code"]').value.trim();
@@ -647,7 +647,7 @@
 
             const formData = new FormData(e.target);
             const studentData = {
-                img_url: studentImageUrl,
+                img_url: studentImageUrl || null,
                 is_active: true,
                 temporary_qr_code: tempQRCode
             };
