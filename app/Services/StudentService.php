@@ -513,11 +513,11 @@ class StudentService
                 $baseUrl = config('app.url');
 
                 if ($gender === 'male') {
-                    $data['img_url'] = $baseUrl . '/default-images/male.png';
+                    $data['img_url'] = $baseUrl . '/uploads/default-images/male.png';
                 } elseif ($gender === 'female') {
-                    $data['img_url'] = $baseUrl . '/default-images/female.png';
+                    $data['img_url'] = $baseUrl . '/uploads/default-images/female.png';
                 } else {
-                    $data['img_url'] = $baseUrl . '/default-images/other.png';
+                    $data['img_url'] = $baseUrl . '/uploads/default-images/other.png';
                 }
             }
 
