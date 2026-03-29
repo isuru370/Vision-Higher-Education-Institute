@@ -507,12 +507,17 @@ class StudentService
 
             // Set default image if img_url is null or empty
             if (empty($data['img_url'])) {
-                if ($data['gender'] === 'male') {
-                    $data['img_url'] = 'https://visioneducation.nexorait.lk/default-images/male.png';
-                } elseif ($data['gender'] === 'female') {
-                    $data['img_url'] = 'https://visioneducation.nexorait.lk/default-images/female.png';
+
+                $gender = strtolower($data['gender']); // 🔥 normalize
+
+                $baseUrl = config('app.url');
+
+                if ($gender === 'male') {
+                    $data['img_url'] = $baseUrl . '/default-images/male.png';
+                } elseif ($gender === 'female') {
+                    $data['img_url'] = $baseUrl . '/default-images/female.png';
                 } else {
-                    $data['img_url'] = 'https://visioneducation.nexorait.lk/default-images/other.png';
+                    $data['img_url'] = $baseUrl . '/default-images/other.png';
                 }
             }
 
