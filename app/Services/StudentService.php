@@ -116,7 +116,7 @@ class StudentService
     {
         try {
             $students = Student::where('is_active', 1)
-                ->where('permanent_qr_active',false)
+                ->where('permanent_qr_active', false)
                 ->where('student_disable', 0)
                 ->orderBy('id', 'desc')
                 ->get()
@@ -464,7 +464,6 @@ class StudentService
                 $quickPhoto->update(['is_active' => 0]);
             }
 
-            // Validate input (without temporary_qr_code_expire_date, we'll auto-set it)
             $validator = Validator::make($request->all(), [
                 'temporary_qr_code' => 'required|string|max:255',
                 'full_name' => 'required|string|max:255',
@@ -483,7 +482,7 @@ class StudentService
                 'guardian_nic' => 'nullable|string|max:20',
                 'guardian_mobile' => 'nullable|string|max:15',
                 'is_active' => 'nullable|boolean',
-                'img_url' => 'required|string|max:255',
+                'img_url' => 'nullable|string|max:255', // required -> nullable
                 'grade_id' => ['required', 'exists:grades,id'],
                 'class_type' => 'required|in:online,offline',
                 'admission' => 'nullable|boolean',
@@ -505,6 +504,17 @@ class StudentService
 
             // Auto-set temporary QR code expiration to 2 months from today
             $data['temporary_qr_code_expire_date'] = Carbon::now()->addMonths(2);
+
+            // Set default image if img_url is null or empty
+            if (empty($data['img_url'])) {
+                if ($data['gender'] === 'male') {
+                    $data['img_url'] = 'default-images/male.png';
+                } elseif ($data['gender'] === 'female') {
+                    $data['img_url'] = 'default-images/female.png';
+                } else {
+                    $data['img_url'] = 'default-images/other.png';
+                }
+            }
 
             // Ensure boolean fields are properly cast
             $data['is_active'] = boolval($data['is_active'] ?? true);
@@ -1056,35 +1066,40 @@ class StudentService
         // Generate a random password
         $password = Str::random(8);
 
+        // ✅ Make username unique
+        $baseUsername = $student->mobile;
+        $username = $baseUsername;
+        $count = 1;
+
+        while (StudentPortalLogin::where('username', $username)->exists()) {
+            $username = $baseUsername . '_' . $count;
+            $count++;
+        }
+
         if (auth()->check()) {
-            // Admin is creating the student
+            // Admin creating
             StudentPortalLogin::create([
                 'student_id' => $student->id,
-                'username'   => $student->mobile,  // or email if you prefer
+                'username'   => $username,
                 'password'   => Hash::make($password),
                 'is_active'  => true,
                 'is_verify'  => true,
                 'otp'        => null,
                 'otp_expires_at' => null,
             ]);
-
-            //Log::info("Admin created portal login for student ID {$student->id}");
         } else {
-            // Self-registration → OTP required
-            $otp = rand(100000, 999999); // 6-digit OTP
+            // Self registration
+            $otp = rand(100000, 999999);
 
             StudentPortalLogin::create([
                 'student_id'      => $student->id,
-                'username'        => $student->mobile,
+                'username'        => $username,
                 'password'        => Hash::make($password),
-                'is_active'       => false, // account inactive until OTP verify
+                'is_active'       => false,
                 'is_verify'       => false,
                 'otp'             => $otp,
                 'otp_expires_at'  => now()->addMinutes(5),
             ]);
-
-            // TODO: send OTP via SMS gateway
-            // Log::info("OTP {$otp} generated for student ID {$student->id} (self-registration)");
         }
     }
 
