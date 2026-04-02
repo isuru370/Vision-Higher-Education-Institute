@@ -687,16 +687,6 @@ class StudentStudentStudentClassService
                 return response()->json([
                     'status' => 'error',
                     'message' => $message,
-                    'existing_record' => [
-                        'id' => $existingRecord->id,
-                        'student_id' => $existingRecord->student_id,
-                        'student_classes_id' => $existingRecord->student_classes_id,
-                        'class_category_has_student_class_id' => $existingRecord->class_category_has_student_class_id,
-                        'status' => $existingRecord->status,
-                        'is_free_card' => $existingRecord->is_free_card,
-                        'final_fee' => $existingRecord->final_fee,
-                        'fee_type' => $existingRecord->fee_type,
-                    ]
                 ], 409);
             }
 
@@ -730,21 +720,6 @@ class StudentStudentStudentClassService
             return response()->json([
                 'status' => 'success',
                 'message' => 'Record created successfully',
-                'record' => [
-                    'id' => $record->id,
-                    'student_id' => $record->student_id,
-                    'student_classes_id' => $record->student_classes_id,
-                    'class_category_has_student_class_id' => $record->class_category_has_student_class_id,
-                    'status' => $record->status,
-                    'inactive_text' => $record->status ? 'active' : 'inactive',
-                    'is_free_card' => $record->is_free_card,
-                    'custom_fee' => $record->custom_fee,
-                    'discount_percentage' => $record->discount_percentage,
-                    'discount_type' => $record->discount_type,
-                    'default_fee' => $record->default_fee,
-                    'final_fee' => $record->final_fee,
-                    'fee_type' => $record->fee_type,
-                ]
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
