@@ -465,41 +465,46 @@ class StudentAttendanceService
     public function getStudentAttendances($studentId, $classCategoryHasStudentClassId)
     {
         try {
-            // Step 1: Get the class record
-            $studentClass = StudentStudentStudentClass::where('student_id', $studentId)
+            // Check whether student is enrolled in this class
+            StudentStudentStudentClass::where('student_id', $studentId)
                 ->where('class_category_has_student_class_id', $classCategoryHasStudentClassId)
                 ->firstOrFail();
 
-            // Step 2: Get all active ongoing attendance records for this class
+            // Get all active ongoing class attendances
             $classAttendances = ClassAttendance::where('class_category_has_student_class_id', $classCategoryHasStudentClassId)
                 ->where('status', 1)
                 ->where('is_ongoing', 1)
                 ->orderBy('date', 'asc')
                 ->get();
 
+            $attendanceIds = $classAttendances->pluck('id');
+
+            // Get student's present attendance ids
+            $presentAttendanceIds = StudentAttendance::where('student_id', $studentId)
+                ->whereIn('attendance_id', $attendanceIds)
+                ->pluck('attendance_id')
+                ->toArray();
+
             $attendanceData = [];
             $presentCount = 0;
 
             foreach ($classAttendances as $attendance) {
-                $studentAttendance = StudentAttendance::where('student_id', $studentId)
-                    ->where('student_student_student_classes_id', $studentClass->id)
-                    ->where('attendance_id', $attendance->id)
-                    ->first();
+                $isPresent = in_array($attendance->id, $presentAttendanceIds);
 
-                $status = $studentAttendance ? 'Present' : 'Absent';
-
-                if ($status === 'Present') {
+                if ($isPresent) {
                     $presentCount++;
                 }
 
                 $attendanceData[] = [
                     'date' => $attendance->date,
-                    'status' => $status,
+                    'status' => $isPresent ? 'Present' : 'Absent',
                 ];
             }
 
-            $totalClasses = count($classAttendances);
-            $percentage = $totalClasses > 0 ? round(($presentCount / $totalClasses) * 100, 2) : 0;
+            $totalClasses = $classAttendances->count();
+            $percentage = $totalClasses > 0
+                ? round(($presentCount / $totalClasses) * 100, 2)
+                : 0;
 
             return response()->json([
                 'status' => 'success',
@@ -631,10 +636,9 @@ class StudentAttendanceService
                 ], 400);
             }
 
-            // Process category mapping and student grouping
+            // Get grouped students
             $processedData = $this->processStudentCategories($class_id);
 
-            // Find the requested category group
             $matchedGroup = collect($processedData['grouped_results'])
                 ->firstWhere('class_category_has_student_class_id', $class_category_student_class_id);
 
@@ -642,14 +646,9 @@ class StudentAttendanceService
                 return response()->json([
                     'status' => false,
                     'message' => 'No matching category group found.',
-                    'requested_id' => $class_category_student_class_id,
-                    'available_ids' => collect($processedData['grouped_results'])
-                        ->pluck('class_category_has_student_class_id')
-                        ->toArray(),
                 ], 404);
             }
 
-            // Extract students belonging to that category
             $studentIds = collect($matchedGroup['students'])
                 ->pluck('student_id')
                 ->unique()
@@ -658,25 +657,24 @@ class StudentAttendanceService
 
             $today = now()->toDateString();
 
-            // Today's attendance records for these students - matching the requested status
-            $attendanceRecords = StudentAttendance::with('student')
-                ->whereIn('student_id', $studentIds)
+            // 🔥 FIX: only valid columns used
+            $attendanceRecords = StudentAttendance::whereIn('student_id', $studentIds)
                 ->whereDate('at_date', $today)
                 ->where('attendance_id', $attendance_id)
                 ->get()
                 ->keyBy('student_id');
 
-            // Build attendance list with default ABSENT
             $attendanceList = [];
 
             foreach ($studentIds as $studentId) {
                 if (isset($attendanceRecords[$studentId])) {
                     $record = $attendanceRecords[$studentId];
+
                     $attendanceList[] = [
                         'student_id' => $studentId,
                         'attendance_status' => 'present',
-                        'status' => $record->status,
-                        'attendance_id' => $record->id,
+                        'status' => 1, // ✅ FIXED (no DB column)
+                        'attendance_id' => $record->id, // student_attendance id
                         'attendance_date' => $record->at_date,
                         'is_present' => true,
                     ];
@@ -684,7 +682,7 @@ class StudentAttendanceService
                     $attendanceList[] = [
                         'student_id' => $studentId,
                         'attendance_status' => 'absent',
-                        'status' => null,
+                        'status' => 0,
                         'attendance_id' => null,
                         'attendance_date' => $today,
                         'is_present' => false,
@@ -692,7 +690,7 @@ class StudentAttendanceService
                 }
             }
 
-            // Append student details
+            // Student details
             $students = Student::whereIn('id', array_column($attendanceList, 'student_id'))
                 ->get(['id', 'custom_id', 'full_name', 'initial_name', 'guardian_mobile'])
                 ->keyBy('id');
@@ -716,7 +714,6 @@ class StudentAttendanceService
                 ];
             }
 
-            // Counts
             $presentCount = count(array_filter($finalResult, fn($x) => $x['is_present']));
             $absentCount = count(array_filter($finalResult, fn($x) => !$x['is_present']));
 
@@ -735,19 +732,20 @@ class StudentAttendanceService
                         'present' => $presentCount,
                         'absent' => $absentCount,
                         'attendance_percentage' =>
-                        count($studentIds) > 0 ? round(($presentCount / count($studentIds)) * 100, 2) : 0,
+                        count($studentIds) > 0
+                            ? round(($presentCount / count($studentIds)) * 100, 2)
+                            : 0,
                     ],
                 ],
             ]);
         } catch (Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'An unexpected error occurred while processing the request.',
+                'message' => 'An unexpected error occurred.',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
     }
-
 
 
     private function processStudentCategories($class_id)

@@ -858,4 +858,40 @@ class StudentStudentStudentClassService
             ], 500);
         }
     }
+
+    public function updateStudentClass(Request $request, $id)
+    {
+        $studentClass = StudentStudentStudentClass::findOrFail($id);
+
+        $validated = $request->validate([
+            'is_free_card' => 'nullable|boolean',
+            'custom_fee' => 'nullable|numeric|min:0',
+            'discount_percentage' => 'nullable|numeric|min:0|max:100',
+            'discount_type' => 'nullable|string|max:255',
+        ]);
+
+        if ($request->has('is_free_card')) {
+            $studentClass->is_free_card = $request->is_free_card;
+        }
+
+        if ($request->exists('custom_fee')) {
+            $studentClass->custom_fee = $request->custom_fee;
+        }
+
+        if ($request->exists('discount_percentage')) {
+            $studentClass->discount_percentage = $request->discount_percentage;
+        }
+
+        if ($request->exists('discount_type')) {
+            $studentClass->discount_type = $request->discount_type;
+        }
+
+        $studentClass->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Student class updated successfully',
+            'data' => $studentClass
+        ], 200);
+    }
 }
