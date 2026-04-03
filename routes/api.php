@@ -181,6 +181,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bulk', [StudentStudentStudentClassController::class, 'bulkStore']);
         Route::post('/single', [StudentStudentStudentClassController::class, 'storeSingleStudentClass']);
         Route::get('/read', [StudentStudentStudentClassController::class, 'readStudentClass']);
+
+        Route::put('/{id}', [StudentStudentStudentClassController::class, 'updateStudentClass']);
         //Get students by class and category
         Route::get('/{classId}/category/{categoryId}', [StudentStudentStudentClassController::class, 'getStudentsByClassAndCategory']);
         Route::get('/all/{classId}/category/{categoryId}', [StudentStudentStudentClassController::class, 'allDetailsGetStudentsByClassAndCategory']);
@@ -373,6 +375,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::prefix('payments')->group(function () {
         Route::post('/', [PaymentsController::class, 'storePayment']);
+        Route::post('/bulk', [PaymentsController::class, 'storeBulkPayments']);
         Route::get('/by-date/{date}', [PaymentsController::class, 'getPaymentsByDate']);
         Route::get('/receipt/{payment_id}', [PaymentsController::class, 'receiptPrint']);
         Route::get('/mobile', [PaymentsController::class, 'mobileReadStudentPayment']); // ✅ fixed
@@ -393,6 +396,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/monthly-income/{yearMonth}', [TeacherPaymentsController::class, 'getMonthlyPayments']);
         Route::post('/{id}/toggle-status', [TeacherPaymentsController::class, 'togglePaymentStatus']);
         Route::post('/', [TeacherPaymentsController::class, 'storeTeacherPayments']);
+
+        Route::get('/daily', [TeacherPaymentsController::class, 'fetchTeacherPaymentsDaily']);
+        Route::get('/weekly', [TeacherPaymentsController::class, 'fetchTeacherPaymentsWeekly']);
+
+        Route::get('/daily/teacher', [TeacherPaymentsController::class, 'fetchTeacherPaymentsDailyByTeacher']);
+        Route::get('/weekly/teacher', [TeacherPaymentsController::class, 'fetchTeacherPaymentsWeeklyByTeacher']);
     });
 
     Route::prefix('institute-payments')->group(function () {
@@ -411,5 +420,4 @@ Route::middleware('auth:sanctum')->group(function () {
             ->where('yearMonth', '[0-9]{4}-[0-9]{2}');
         Route::get('/test/{yearMonth}', [LedgerSummaryController::class, 'testMonth']);
     });
-
 });

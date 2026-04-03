@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\TeacherPaymentsService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class TeacherPaymentsController extends Controller
 {
@@ -34,6 +34,62 @@ class TeacherPaymentsController extends Controller
     public function fetchSalarySlipDataTest($teacherId, $yearMonth)
     {
         return $this->teacherPaymentsService->fetchSalarySlipDataTest($teacherId, $yearMonth);
+    }
+
+
+
+    public function fetchTeacherPaymentsDaily(Request $request)
+    {
+        $response = $this->teacherPaymentsService->fetchTeacherPaymentsDaily();
+        $result = $response->getData(true);
+
+        $pdf = Pdf::loadView('repost.pdf.daily-payments', [
+            'data' => $result['data'] ?? [],
+            'day'  => $request->day ?? now()->toDateString(),
+        ]);
+
+        return $pdf->download('daily-teacher-payments.pdf');
+    }
+
+    public function fetchTeacherPaymentsWeekly(Request $request)
+    {
+        $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeekly();
+        $result = $response->getData(true);
+
+        $pdf = Pdf::loadView('repost.pdf.weekly-payments', [
+            'data' => $result['data'] ?? [],
+            'start_date' => $request->start_date,
+            'end_date'   => $request->end_date,
+        ]);
+
+        return $pdf->download('weekly-teacher-payments.pdf');
+    }
+
+    public function fetchTeacherPaymentsDailyByTeacher(Request $request)
+    {
+        $response = $this->teacherPaymentsService->fetchTeacherPaymentsDailyByTeacher($request);
+        $result = $response->getData(true);
+
+        $pdf = Pdf::loadView('repost.pdf.daily-teacher-payment', [
+            'data' => $result['data'] ?? [],
+            'date' => $result['date'] ?? $request->day,
+        ]);
+
+        return $pdf->download('daily-teacher-payment.pdf');
+    }
+
+    public function fetchTeacherPaymentsWeeklyByTeacher(Request $request)
+    {
+        $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeeklyByTeacher($request);
+        $result = $response->getData(true);
+
+        $pdf = Pdf::loadView('repost.pdf.weekly-teacher-payment', [
+            'data' => $result['data'] ?? [],
+            'start_date' => $result['start_date'] ?? $request->start_date,
+            'end_date'   => $result['end_date'] ?? $request->end_date,
+        ]);
+
+        return $pdf->download('weekly-teacher-payment.pdf');
     }
 
     public function studentPaymentMonthCheck($teacherId, $yearMonth)

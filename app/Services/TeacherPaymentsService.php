@@ -1709,6 +1709,302 @@ class TeacherPaymentsService
     }
 
 
+    public function fetchTeacherPaymentsDaily()
+    {
+        try {
+            $monthlyData = $this->fetchTeacherPaymentsCurrentMonth()->getData(true);
+
+            $now = Carbon::now();
+            $daysInMonth = $now->daysInMonth;
+
+            $dailyResult = [];
+
+            foreach ($monthlyData['data'] as $teacher) {
+
+                $dailySalary = round($teacher['net_teacher_payable'] / $daysInMonth, 2);
+
+                $dailyResult[] = [
+                    'teacher_id' => $teacher['teacher_id'],
+                    'teacher_name' => $teacher['teacher_name'],
+                    'monthly_salary' => $teacher['net_teacher_payable'],
+                    'daily_salary' => $dailySalary,
+                ];
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'daily',
+                'data' => $dailyResult
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to calculate daily payments.'
+            ], 500);
+        }
+    }
+
+    public function fetchTeacherPaymentsWeekly()
+    {
+        try {
+            $monthlyData = $this->fetchTeacherPaymentsCurrentMonth()->getData(true);
+
+            $now = Carbon::now();
+            $daysInMonth = $now->daysInMonth;
+
+            $weeklyResult = [];
+
+            foreach ($monthlyData['data'] as $teacher) {
+
+                $dailySalary = round($teacher['net_teacher_payable'] / $daysInMonth, 2);
+                $weeklySalary = round($dailySalary * 7, 2);
+
+                $weeklyResult[] = [
+                    'teacher_id' => $teacher['teacher_id'],
+                    'teacher_name' => $teacher['teacher_name'],
+                    'monthly_salary' => $teacher['net_teacher_payable'],
+                    'weekly_salary' => $weeklySalary,
+                ];
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'weekly',
+                'data' => $weeklyResult
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to calculate weekly payments.'
+            ], 500);
+        }
+    }
+
+    public function fetchTeacherPaymentsDailyByTeacher(Request $request)
+    {
+        try {
+            $teacherId = $request->teacher_id;
+            $day = $request->day; // example: 2026-04-04
+
+            if (!$teacherId || !$day) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'teacher_id and day are required.'
+                ], 422);
+            }
+
+            $selectedDate = Carbon::parse($day)->startOfDay();
+            $startOfDay = $selectedDate->copy()->startOfDay();
+            $endOfDay = $selectedDate->copy()->endOfDay();
+
+            $teacher = Teacher::select('id', 'fname', 'lname')
+                ->where('id', $teacherId)
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$teacher) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Teacher not found.'
+                ], 404);
+            }
+
+            $payments = Payments::where('status', 1)
+                ->whereBetween('payment_date', [$startOfDay, $endOfDay])
+                ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherId) {
+                    $q->where('teacher_id', $teacherId)
+                        ->where('is_active', 1);
+                })
+                ->with([
+                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage'
+                ])
+                ->get();
+
+            $totalForDay = 0.0;
+            $grossTeacherEarning = 0.0;
+            $classWise = [];
+
+            foreach ($payments as $payment) {
+                $class = optional(optional($payment->studentStudentClass)->studentClass);
+
+                if (!$class || !$class->id) {
+                    continue;
+                }
+
+                $amount = (float) $payment->amount;
+                $percentage = (float) ($class->teacher_percentage ?? 0);
+
+                $teacherCut = round(($amount * $percentage) / 100, 2);
+                $institutionCut = round($amount - $teacherCut, 2);
+
+                $totalForDay += $amount;
+                $grossTeacherEarning += $teacherCut;
+
+                if (!isset($classWise[$class->id])) {
+                    $classWise[$class->id] = [
+                        'class_id' => $class->id,
+                        'class_name' => $class->class_name,
+                        'teacher_percentage' => $percentage,
+                        'total_amount' => 0.0,
+                        'teacher_cut' => 0.0,
+                        'institution_cut' => 0.0,
+                    ];
+                }
+
+                $classWise[$class->id]['total_amount'] += $amount;
+                $classWise[$class->id]['teacher_cut'] += $teacherCut;
+                $classWise[$class->id]['institution_cut'] += $institutionCut;
+            }
+
+            $advanceDeducted = (float) TeacherPayment::where('teacher_id', $teacherId)
+                ->where('status', 1)
+                ->whereBetween('created_at', [
+                    $selectedDate->startOfDay(),
+                    $selectedDate->endOfDay()
+                ])
+                ->sum('payment');
+
+            $grossTeacherEarning = round($grossTeacherEarning, 2);
+            $totalForDay = round($totalForDay, 2);
+            $institutionIncome = round($totalForDay - $grossTeacherEarning, 2);
+            $netPayable = round(max($grossTeacherEarning - $advanceDeducted, 0), 2);
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'daily',
+                'date' => $selectedDate->toDateString(),
+                'data' => [
+                    'teacher_id' => $teacher->id,
+                    'teacher_name' => trim(($teacher->fname ?? '') . ' ' . ($teacher->lname ?? '')),
+                    'total_payments_for_day' => $totalForDay,
+                    'gross_teacher_earning' => $grossTeacherEarning,
+                    'advance_deducted_for_day' => round($advanceDeducted, 2),
+                    'net_teacher_payable' => $netPayable,
+                    'institution_income' => $institutionIncome,
+                    'class_wise_breakdown' => array_values($classWise),
+                ]
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to calculate daily teacher payments.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function fetchTeacherPaymentsWeeklyByTeacher(Request $request)
+    {
+        try {
+            $teacherId = $request->teacher_id;
+            $startDate = $request->start_date; // example: 2026-04-01
+            $endDate = $request->end_date;     // example: 2026-04-07
+
+            if (!$teacherId || !$startDate || !$endDate) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'teacher_id, start_date and end_date are required.'
+                ], 422);
+            }
+
+            $startOfWeek = Carbon::parse($startDate)->startOfDay();
+            $endOfWeek = Carbon::parse($endDate)->endOfDay();
+
+            $teacher = Teacher::select('id', 'fname', 'lname')
+                ->where('id', $teacherId)
+                ->where('is_active', 1)
+                ->first();
+
+            if (!$teacher) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Teacher not found.'
+                ], 404);
+            }
+
+            $payments = Payments::where('status', 1)
+                ->whereBetween('payment_date', [$startOfWeek, $endOfWeek])
+                ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherId) {
+                    $q->where('teacher_id', $teacherId)
+                        ->where('is_active', 1);
+                })
+                ->with([
+                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage'
+                ])
+                ->get();
+
+            $totalForWeek = 0.0;
+            $grossTeacherEarning = 0.0;
+            $classWise = [];
+
+            foreach ($payments as $payment) {
+                $class = optional(optional($payment->studentStudentClass)->studentClass);
+
+                if (!$class || !$class->id) {
+                    continue;
+                }
+
+                $amount = (float) $payment->amount;
+                $percentage = (float) ($class->teacher_percentage ?? 0);
+
+                $teacherCut = round(($amount * $percentage) / 100, 2);
+                $institutionCut = round($amount - $teacherCut, 2);
+
+                $totalForWeek += $amount;
+                $grossTeacherEarning += $teacherCut;
+
+                if (!isset($classWise[$class->id])) {
+                    $classWise[$class->id] = [
+                        'class_id' => $class->id,
+                        'class_name' => $class->class_name,
+                        'teacher_percentage' => $percentage,
+                        'total_amount' => 0.0,
+                        'teacher_cut' => 0.0,
+                        'institution_cut' => 0.0,
+                    ];
+                }
+
+                $classWise[$class->id]['total_amount'] += $amount;
+                $classWise[$class->id]['teacher_cut'] += $teacherCut;
+                $classWise[$class->id]['institution_cut'] += $institutionCut;
+            }
+
+            $advanceDeducted = (float) TeacherPayment::where('teacher_id', $teacherId)
+                ->where('status', 1)
+                ->whereBetween('created_at', [$startOfWeek, $endOfWeek])
+                ->sum('payment');
+
+            $grossTeacherEarning = round($grossTeacherEarning, 2);
+            $totalForWeek = round($totalForWeek, 2);
+            $institutionIncome = round($totalForWeek - $grossTeacherEarning, 2);
+            $netPayable = round(max($grossTeacherEarning - $advanceDeducted, 0), 2);
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'weekly',
+                'start_date' => $startOfWeek->toDateString(),
+                'end_date' => $endOfWeek->toDateString(),
+                'data' => [
+                    'teacher_id' => $teacher->id,
+                    'teacher_name' => trim(($teacher->fname ?? '') . ' ' . ($teacher->lname ?? '')),
+                    'total_payments_for_week' => $totalForWeek,
+                    'gross_teacher_earning' => $grossTeacherEarning,
+                    'advance_deducted_for_week' => round($advanceDeducted, 2),
+                    'net_teacher_payable' => $netPayable,
+                    'institution_income' => $institutionIncome,
+                    'class_wise_breakdown' => array_values($classWise),
+                ]
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to calculate weekly teacher payments.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
     public function studentPaymentMonthCheck($teacherId, $yearMonth)
     {
         //     try {

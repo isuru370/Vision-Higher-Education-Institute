@@ -67,4 +67,9 @@ class StudentStudentStudentClassController extends Controller
     {
         return $this->studentStudentStudentClassService->storeSingleStudentClass($request);
     }
+
+        public function updateStudentClass(Request $request,$id)
+    {
+        return $this->studentStudentStudentClassService->updateStudentClass($request, $id);
+    }
 }
