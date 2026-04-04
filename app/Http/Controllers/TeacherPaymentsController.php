@@ -38,12 +38,12 @@ class TeacherPaymentsController extends Controller
 
 
 
-    public function fetchTeacherPaymentsDaily(Request $request)
+    public function fetchTeacherPaymentsDaily()
     {
         $response = $this->teacherPaymentsService->fetchTeacherPaymentsDaily();
         $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('repost.pdf.daily-payments', [
+        $pdf = Pdf::loadView('reports.pdf.daily-payments', [
             'data' => $result['data'] ?? [],
             'day'  => $request->day ?? now()->toDateString(),
         ]);
@@ -51,15 +51,13 @@ class TeacherPaymentsController extends Controller
         return $pdf->download('daily-teacher-payments.pdf');
     }
 
-    public function fetchTeacherPaymentsWeekly(Request $request)
+    public function fetchTeacherPaymentsWeekly()
     {
         $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeekly();
         $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('repost.pdf.weekly-payments', [
+        $pdf = Pdf::loadView('reports.pdf.weekly-payments', [
             'data' => $result['data'] ?? [],
-            'start_date' => $request->start_date,
-            'end_date'   => $request->end_date,
         ]);
 
         return $pdf->download('weekly-teacher-payments.pdf');
@@ -70,7 +68,7 @@ class TeacherPaymentsController extends Controller
         $response = $this->teacherPaymentsService->fetchTeacherPaymentsDailyByTeacher($request);
         $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('repost.pdf.daily-teacher-payment', [
+        $pdf = Pdf::loadView('reports.pdf.daily-teacher-payment', [
             'data' => $result['data'] ?? [],
             'date' => $result['date'] ?? $request->day,
         ]);
@@ -83,7 +81,7 @@ class TeacherPaymentsController extends Controller
         $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeeklyByTeacher($request);
         $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('repost.pdf.weekly-teacher-payment', [
+        $pdf = Pdf::loadView('reports.pdf.weekly-teacher-payment', [
             'data' => $result['data'] ?? [],
             'start_date' => $result['start_date'] ?? $request->start_date,
             'end_date'   => $result['end_date'] ?? $request->end_date,

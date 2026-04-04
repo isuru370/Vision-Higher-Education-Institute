@@ -272,6 +272,13 @@ Route::middleware(['auth', 'check.permission'])->group(function () {
         Route::get('/history/{teacherId}', [TeacherPaymentsController::class, 'historyPage'])->name('history');
         Route::get('/view/{teacherId}', [TeacherPaymentsController::class, 'viewPage'])->name('view');
         Route::get('/salary-slip/{teacherId}/{yearMonth}', [TeacherPaymentsController::class, 'showSalarySlip'])->name('salary-slip-exact');
+
+        
+        Route::get('/daily', [TeacherPaymentsController::class, 'fetchTeacherPaymentsDaily']);
+        Route::get('/weekly', [TeacherPaymentsController::class, 'fetchTeacherPaymentsWeekly']);
+
+        Route::get('/daily/teacher', [TeacherPaymentsController::class, 'fetchTeacherPaymentsDailyByTeacher']);
+        Route::get('/weekly/teacher', [TeacherPaymentsController::class, 'fetchTeacherPaymentsWeeklyByTeacher']);
     });
 
     Route::prefix('institute-payment')->name('institute_payment.')->group(function () {

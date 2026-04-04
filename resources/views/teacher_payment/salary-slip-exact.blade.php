@@ -262,7 +262,7 @@
     <!-- SIGNATURES -->
     <div class="signature-area">
         <div><strong>Teacher's Signature:</strong> _____________</div>
-        <div><strong>SA Owner:</strong> _____________</div>
+        <div><strong>Vision Owner:</strong> _____________</div>
     </div>
 
 @endif
