@@ -17,6 +17,7 @@ class MobileDashboardController extends Controller
                 now()->startOfDay(),
                 now()->endOfDay()
             ])
+            ->where('status', 1)
             ->sum('amount');
 
         // Today class schedule
