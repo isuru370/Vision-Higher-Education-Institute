@@ -567,7 +567,6 @@ class StudentPaymentService
     public function getPaymentsByDate($date)
     {
         try {
-            // Validate date format
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
                 return response()->json([
                     'status' => 'error',
@@ -575,45 +574,48 @@ class StudentPaymentService
                 ], 400);
             }
 
-            if (!strtotime($date)) {
+            $parsedDate = Carbon::createFromFormat('Y-m-d', $date);
+            if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Invalid date.'
                 ], 400);
             }
 
-            // Load payments with student and student class data
             $payments = Payments::with([
-                'student',
-                'studentStudentClass.studentClass',
-                'studentStudentClass.studentClass.teacher'
-
+                'student:id,custom_id,full_name,initial_name',
+                'studentStudentClass.studentClass:id,class_name,teacher_id',
+                'studentStudentClass.studentClass.teacher:id,fname,lname'
             ])
-                ->whereDate('payment_date', $date)
+                ->whereBetween('payment_date', [$date . ' 00:00:00', $date . ' 23:59:59'])
                 ->where('status', 1)
                 ->get()
                 ->map(function ($payment) {
+                    $student = $payment->student;
+                    $studentClass = optional($payment->studentStudentClass)->studentClass;
+                    $teacher = optional($studentClass)->teacher;
+
                     return [
                         'id' => $payment->id,
                         'payment_date' => $payment->payment_date,
                         'amount' => $payment->amount,
                         'payment_for' => $payment->payment_for,
                         'created_at' => $payment->created_at,
-                        'student' =>  [
-                            'id' => $payment->student->id,
-                            'custom_id' => $payment->student->custom_id,
-                            'first_name' => $payment->student->full_name,
-                            'last_name' => $payment->student->initial_name,
-                        ],
-                        'student_class' => [
-                            'id' => $payment->studentStudentClass->studentClass->id,
-                            'class_name' => $payment->studentStudentClass->studentClass->class_name,
-                        ],
-                        'teacher' => [
-                            'id' => $payment->studentStudentClass->studentClass->teacher->id,
-                            'first_name' => $payment->studentStudentClass->studentClass->teacher->full_name,
-                            'last_name' => $payment->studentStudentClass->studentClass->teacher->initial_name,
-                        ],
+                        'student' => $student ? [
+                            'id' => $student->id,
+                            'custom_id' => $student->custom_id,
+                            'full_name' => $student->full_name,
+                            'initial_name' => $student->initial_name,
+                        ] : null,
+                        'student_class' => $studentClass ? [
+                            'id' => $studentClass->id,
+                            'class_name' => $studentClass->class_name,
+                        ] : null,
+                        'teacher' => $teacher ? [
+                            'id' => $teacher->id,
+                            'fname' => $teacher->fname,
+                            'lname' => $teacher->lname,
+                        ] : null,
                     ];
                 });
 
