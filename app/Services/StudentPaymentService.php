@@ -124,6 +124,7 @@ class StudentPaymentService
             $studentClasses = StudentStudentStudentClass::with([
                 'student',
                 'classCategoryHasStudentClass.classCategory',
+                'studentClass.teacher',
                 'studentClass.grade',
                 'studentClass.subject'
             ])
@@ -199,6 +200,10 @@ class StudentPaymentService
                     'student_class' => [
                         'id' => optional($studentClassModel->studentClass)->id,
                         'class_name' => optional($studentClassModel->studentClass)->class_name,
+                        'teacher' => optional($studentClassModel->studentClass->teacher) ? [
+                            'id' => optional($studentClassModel->studentClass->teacher)->id,
+                            'teacher_name' => optional($studentClassModel->studentClass->teacher)->fname . ' ' . optional($studentClassModel->studentClass->teacher)->lname
+                        ] : null,
                         'grade' => optional($studentClassModel->studentClass->grade) ? [
                             'grade_name' => optional($studentClassModel->studentClass->grade)->grade_name
                         ] : null,
