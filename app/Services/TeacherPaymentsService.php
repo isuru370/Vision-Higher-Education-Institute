@@ -315,11 +315,6 @@ class TeacherPaymentsService
             $startOfMonth = $month->copy()->startOfMonth();
             $endOfMonth   = $month->copy()->endOfMonth();
 
-            Log::info('Parsed Month', [
-                'start' => $startOfMonth->toDateTimeString(),
-                'end' => $endOfMonth->toDateTimeString()
-            ]);
-
             /*
     |--------------------------------------------------------------------------
     | Fetch Active Classes for the Teacher
@@ -330,24 +325,7 @@ class TeacherPaymentsService
                 ->where('is_active', 1)
                 ->get();
 
-            Log::info('Classes Query Result', [
-                'teacher_id' => $teacherId,
-                'classes_count' => $classes->count(),
-                'classes' => $classes->map(function ($class) {
-                    return [
-                        'id' => $class->id,
-                        'class_name' => $class->class_name,
-                        'teacher_percentage' => $class->teacher_percentage,
-                    ];
-                })->values()->toArray()
-            ]);
-
             if ($classes->isEmpty()) {
-                Log::warning('No active classes found for teacher', [
-                    'teacher_id' => $teacherId,
-                    'year_month' => $yearMonth
-                ]);
-
                 return response()->json([
                     'status' => 'success',
                     'year_month' => $yearMonth,
@@ -368,10 +346,6 @@ class TeacherPaymentsService
 
             $classIds = $classes->pluck('id')->all();
 
-            Log::info('Class IDs prepared', [
-                'class_ids' => $classIds
-            ]);
-
             /*
     |--------------------------------------------------------------------------
     | Fetch Payments Grouped by REAL Class ID
@@ -388,12 +362,6 @@ class TeacherPaymentsService
                 ->whereIn('sssc.student_classes_id', $classIds)
                 ->groupBy('sssc.student_classes_id')
                 ->get();
-
-            Log::info('Payments Raw', [
-                'count' => $payments->count(),
-                'payments' => $payments->toArray()
-            ]);
-
             /*
     |--------------------------------------------------------------------------
     | Map Payments by Class ID
@@ -404,10 +372,6 @@ class TeacherPaymentsService
             foreach ($payments as $payment) {
                 $paymentsByClass[$payment->class_id] = (float) $payment->total_amount;
             }
-
-            Log::info('Payments By Class', [
-                'payments_by_class' => $paymentsByClass
-            ]);
 
             /*
     |--------------------------------------------------------------------------
@@ -424,11 +388,6 @@ class TeacherPaymentsService
                 ->groupBy('student_classes_id')
                 ->get()
                 ->keyBy('student_classes_id');
-
-            Log::info('Student Counts', [
-                'student_counts' => $studentCounts->toArray()
-            ]);
-
             /*
     |--------------------------------------------------------------------------
     | Paid Students Count (Distinct per Class)
@@ -447,10 +406,6 @@ class TeacherPaymentsService
                 ->get()
                 ->keyBy('student_classes_id');
 
-            Log::info('Paid Students', [
-                'paid_students' => $paidStudents->toArray()
-            ]);
-
             /*
     |--------------------------------------------------------------------------
     | Teacher Payments (Salary + Advances)
@@ -463,12 +418,6 @@ class TeacherPaymentsService
                 ->where('status', 1)
                 ->where('payment_for', $monthYear)
                 ->get();
-
-            Log::info('Teacher Payments Records', [
-                'month_year' => $monthYear,
-                'count' => $teacherPayments->count(),
-                'records' => $teacherPayments->toArray()
-            ]);
 
             /*
     |--------------------------------------------------------------------------
@@ -484,12 +433,6 @@ class TeacherPaymentsService
                 ->values();
 
             $advancePayment = $advanceRecords->sum('payment');
-
-            Log::info('Teacher Payment Summary', [
-                'salary_payment' => $salaryPayment,
-                'advance_payment' => $advancePayment,
-                'advance_records_count' => $advanceRecords->count()
-            ]);
 
             /*
     |--------------------------------------------------------------------------
@@ -518,19 +461,6 @@ class TeacherPaymentsService
                 $paidStudentCount = $paidStudents[$classId]->paid_count ?? 0;
 
                 $unpaidStudentCount = max(0, $studentCount - $paidStudentCount - $freeStudents);
-
-                Log::info('Processing Class', [
-                    'class_id' => $classId,
-                    'class_name' => $class->class_name,
-                    'percentage' => $percentage,
-                    'class_total' => $classTotal,
-                    'teacher_cut' => $teacherCut,
-                    'institution_cut' => $institutionCut,
-                    'student_count' => $studentCount,
-                    'paid_students' => $paidStudentCount,
-                    'free_students' => $freeStudents,
-                    'unpaid_students' => $unpaidStudentCount
-                ]);
 
                 $classWise[] = [
                     'class_id' => $classId,
@@ -580,30 +510,12 @@ class TeacherPaymentsService
                 'advance_records' => $advanceRecords->values()->toArray(),
             ];
 
-            Log::info('Fetch Teacher Payments SUCCESS', [
-                'teacher_id' => $teacherId,
-                'year_month' => $yearMonth,
-                'class_wise_count' => count($classWise),
-                'total_payments' => $totalPayments,
-                'teacher_share' => $teacherShare,
-                'net_payable' => $netPayable,
-                'response_data' => $responseData
-            ]);
-
             return response()->json([
                 'status' => 'success',
                 'year_month' => $yearMonth,
                 'data' => $responseData
             ]);
         } catch (Exception $e) {
-            Log::error('Fetch Teacher Payments ERROR', [
-                'teacher_id' => $teacherId,
-                'year_month' => $yearMonth,
-                'message' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
-                'trace' => $e->getTraceAsString()
-            ]);
 
             return response()->json([
                 'status' => 'error',

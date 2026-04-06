@@ -579,8 +579,16 @@ class StudentPaymentService
                 ], 400);
             }
 
-            $parsedDate = Carbon::createFromFormat('Y-m-d', $date);
-            if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) {
+            try {
+                $parsedDate = Carbon::createFromFormat('Y-m-d', $date);
+
+                if ($parsedDate->format('Y-m-d') !== $date) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Invalid date.'
+                    ], 400);
+                }
+            } catch (\Exception $e) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Invalid date.'
@@ -592,8 +600,9 @@ class StudentPaymentService
                 'studentStudentClass.studentClass:id,class_name,teacher_id',
                 'studentStudentClass.studentClass.teacher:id,fname,lname'
             ])
-                ->whereBetween('payment_date', [$date . ' 00:00:00', $date . ' 23:59:59'])
+                ->whereDate('payment_date', $date)
                 ->where('status', 1)
+                ->orderBy('payment_date', 'asc')
                 ->get()
                 ->map(function ($payment) {
                     $student = $payment->student;
@@ -622,7 +631,8 @@ class StudentPaymentService
                             'lname' => $teacher->lname,
                         ] : null,
                     ];
-                });
+                })
+                ->values();
 
             if ($payments->isEmpty()) {
                 return response()->json([
