@@ -8,38 +8,101 @@
             font-family: DejaVu Sans, sans-serif;
             font-size: 12px;
             color: #000;
+            margin: 20px;
         }
+
         .header {
             text-align: center;
             margin-bottom: 20px;
         }
-        .header h2, .header h4, .header p {
+
+        .header h2,
+        .header h4,
+        .header p {
             margin: 0 0 5px 0;
         }
+
         .summary-table,
         .breakdown-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
         }
-        .summary-table, .summary-table th, .summary-table td,
-        .breakdown-table, .breakdown-table th, .breakdown-table td {
+
+        .summary-table,
+        .summary-table th,
+        .summary-table td,
+        .breakdown-table,
+        .breakdown-table th,
+        .breakdown-table td {
             border: 1px solid #222;
         }
-        th, td {
+
+        th,
+        td {
             padding: 8px;
         }
+
         th {
             background: #f2f2f2;
             text-align: left;
         }
+
         .text-end {
             text-align: right;
         }
+
+        .text-center {
+            text-align: center;
+        }
+
         .section-title {
             margin-top: 20px;
             margin-bottom: 8px;
             font-weight: bold;
+        }
+
+        .signature-section {
+            margin-top: 50px;
+            padding-top: 20px;
+        }
+
+        .signature-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+
+        .signature-box {
+            width: 45%;
+            text-align: center;
+        }
+
+        .signature-line {
+            margin-top: 30px;
+            padding-top: 5px;
+            border-top: 1px solid #000;
+            width: 80%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .signature-label {
+            margin-top: 5px;
+            font-size: 11px;
+            color: #555;
+        }
+
+        .signature-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .date-line {
+            margin-top: 10px;
+            font-size: 10px;
+            color: #666;
         }
     </style>
 </head>
@@ -57,12 +120,20 @@
             <td>{{ $data['teacher_id'] ?? '-' }}</td>
         </tr>
         <tr>
-            <th>Total Payments For Week</th>
-            <td class="text-end">{{ number_format($data['total_payments_for_week'] ?? 0, 2) }}</td>
+            <th>Payment Count</th>
+            <td class="text-end">{{ $data['payment_count'] ?? 0 }}</td>
+        </tr>
+        <tr>
+            <th>Total Payment Amount</th>
+            <td class="text-end">{{ number_format($data['total_payment_amount'] ?? 0, 2) }}</td>
         </tr>
         <tr>
             <th>Gross Teacher Earning</th>
             <td class="text-end">{{ number_format($data['gross_teacher_earning'] ?? 0, 2) }}</td>
+        </tr>
+        <tr>
+            <th>Total Organize Cut</th>
+            <td class="text-end">{{ number_format($data['total_organize_cut'] ?? 0, 2) }}</td>
         </tr>
         <tr>
             <th>Advance Deducted</th>
@@ -71,10 +142,6 @@
         <tr>
             <th>Net Teacher Payable</th>
             <td class="text-end">{{ number_format($data['net_teacher_payable'] ?? 0, 2) }}</td>
-        </tr>
-        <tr>
-            <th>Institution Income</th>
-            <td class="text-end">{{ number_format($data['institution_income'] ?? 0, 2) }}</td>
         </tr>
     </table>
 
@@ -86,9 +153,11 @@
                 <th>#</th>
                 <th>Class Name</th>
                 <th class="text-end">Teacher %</th>
+                <th class="text-end">Organize %</th>
+                <th class="text-end">Payment Count</th>
                 <th class="text-end">Total Amount</th>
                 <th class="text-end">Teacher Cut</th>
-                <th class="text-end">Institution Cut</th>
+                <th class="text-end">Organize Cut</th>
             </tr>
         </thead>
         <tbody>
@@ -97,17 +166,30 @@
                     <td>{{ $index + 1 }}</td>
                     <td>{{ $class['class_name'] ?? '-' }}</td>
                     <td class="text-end">{{ number_format($class['teacher_percentage'] ?? 0, 2) }}</td>
+                    <td class="text-end">{{ number_format($class['organize_percentage'] ?? 0, 2) }}</td>
+                    <td class="text-end">{{ $class['payment_count'] ?? 0 }}</td>
                     <td class="text-end">{{ number_format($class['total_amount'] ?? 0, 2) }}</td>
                     <td class="text-end">{{ number_format($class['teacher_cut'] ?? 0, 2) }}</td>
-                    <td class="text-end">{{ number_format($class['institution_cut'] ?? 0, 2) }}</td>
+                    <td class="text-end">{{ number_format($class['organize_cut'] ?? 0, 2) }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" style="text-align: center;">No class breakdown found</td>
+                    <td colspan="8" class="text-center">No class breakdown found</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
+
+    <div class="signature-section">
+        <div class="signature-row">
+            <div class="signature-box">
+                <div class="signature-title">INSTITUTE AUTHORITY</div>
+                <div class="signature-line"></div>
+                <div class="signature-label">(Authorized Signature)</div>
+                <div class="date-line">Date: {{ date('Y-m-d') }}</div>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>

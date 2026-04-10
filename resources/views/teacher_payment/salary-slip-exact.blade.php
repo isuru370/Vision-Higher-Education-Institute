@@ -67,6 +67,7 @@
         td {
             padding: 6px 8px;
             text-align: left;
+            vertical-align: top;
         }
 
         th.right-align,
@@ -122,14 +123,23 @@
             color: #666;
             font-style: italic;
         }
-    </style>
 
+        .small-text {
+            color: #666;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .summary-table td,
+        .summary-table th {
+            padding: 8px 10px;
+        }
+    </style>
 </head>
 
 <body>
 
 @php
-    // Extract data safely
     $data = $data ?? [];
     $isSuccess = ($data['status'] ?? '') === 'success';
 
@@ -139,11 +149,19 @@
     $monthYearDisplay = $data['month_year_display'] ?? '';
     $dateGenerated = $data['date_generated'] ?? '';
     $isSalaryPaid = $data['is_salary_paid'] ?? false;
+
     $earnings = $data['earnings'] ?? [];
-    $totalAddition = $data['total_addition'] ?? 0;
     $deductions = $data['deductions'] ?? [];
+
+    $totalClassAmount = $data['total_class_amount'] ?? 0;
+    $totalTeacherEarnings = $data['total_teacher_earnings'] ?? 0;
+    $totalOrganizeCut = $data['total_organize_cut'] ?? 0;
+    $totalInstitutionCut = $data['total_institution_cut'] ?? 0;
+
+    $totalAddition = $data['total_addition'] ?? 0;
     $totalDeductions = $data['total_deductions'] ?? 0;
     $netSalary = $data['net_salary'] ?? 0;
+
     $paymentMethod = $data['payment_method'] ?? 'Cash / Bank Deposit';
 @endphp
 
@@ -160,7 +178,6 @@
     </div>
 @else
 
-    <!-- HEADER -->
     <div class="top-section">
         <div class="logo-section">
             <img src="{{ asset('uploads/logo/black_logo.png') }}" class="logo" alt="Logo">
@@ -177,7 +194,6 @@
         </div>
     </div>
 
-    <!-- TEACHER INFO -->
     <table class="teacher-info-table">
         <tr>
             <th>Teacher ID</th>
@@ -195,7 +211,6 @@
         </tr>
     </table>
 
-    <!-- EARNINGS & DEDUCTIONS -->
     <table>
         <tr class="bold">
             <th>Earnings</th>
@@ -210,32 +225,34 @@
 
         @for($i = 0; $i < $maxRows; $i++)
             <tr>
-                <!-- Earnings -->
                 @if(isset($earnings[$i]))
                     <td>
-                        {{ $earnings[$i]['description'] }}<br>
-                        <small style="color: #666;">
-                            {{ isset($earnings[$i]['class_total']) ? 'Total: Rs. ' . number_format($earnings[$i]['class_total'], 2) . ' | ' : '' }}
-                            Teacher: {{ $earnings[$i]['teacher_percentage'] }}% = Rs.
-                            {{ number_format($earnings[$i]['teacher_share'], 2) }}
-                        </small>
+                        {{ $earnings[$i]['description'] ?? '' }}<br>
+                        <div class="small-text">
+                            {{ isset($earnings[$i]['class_total']) ? 'Class Total: Rs. ' . number_format($earnings[$i]['class_total'], 2) : '' }}<br>
+                            Teacher %: {{ $earnings[$i]['teacher_percentage'] ?? 0 }}% = Rs.
+                            {{ number_format($earnings[$i]['teacher_share'] ?? 0, 2) }}<br>
+                            Organize %: {{ $earnings[$i]['organize_percentage'] ?? 0 }}% = Rs.
+                            {{ number_format($earnings[$i]['organize_cut'] ?? 0, 2) }}<br>
+                            Institute Cut: Rs. {{ number_format($earnings[$i]['institution_cut'] ?? 0, 2) }}
+                        </div>
                     </td>
-                    <td class="right-align">{{ number_format($earnings[$i]['teacher_share'], 2) }}</td>
+                    <td class="right-align">{{ number_format($earnings[$i]['amount'] ?? 0, 2) }}</td>
                 @else
-                    <td></td><td></td>
+                    <td></td>
+                    <td></td>
                 @endif
 
-                <!-- Deductions -->
                 @if(isset($deductions[$i]))
-                    <td>{{ $deductions[$i]['description'] }}</td>
-                    <td class="right-align">{{ number_format($deductions[$i]['amount'], 2) }}</td>
+                    <td>{{ $deductions[$i]['description'] ?? '' }}</td>
+                    <td class="right-align">{{ number_format($deductions[$i]['amount'] ?? 0, 2) }}</td>
                 @else
-                    <td></td><td></td>
+                    <td></td>
+                    <td></td>
                 @endif
             </tr>
         @endfor
 
-        <!-- Total Addition / Deductions -->
         <tr class="bold">
             <td>Total Addition</td>
             <td class="right-align">{{ number_format($totalAddition, 2) }}</td>
@@ -249,7 +266,21 @@
         </tr>
     </table>
 
-    <!-- PAYMENT METHOD -->
+    <table class="teacher-info-table summary-table" style="margin-top: 20px;">
+        <tr>
+            <th>Total Class Amount</th>
+            <td>Rs. {{ number_format($totalClassAmount, 2) }}</td>
+            <th>Total Teacher Earnings</th>
+            <td>Rs. {{ number_format($totalTeacherEarnings, 2) }}</td>
+        </tr>
+        <tr>
+            <th>Total Organize Cut</th>
+            <td>Rs. {{ number_format($totalOrganizeCut, 2) }}</td>
+            <th>Total Institution Cut</th>
+            <td>Rs. {{ number_format($totalInstitutionCut, 2) }}</td>
+        </tr>
+    </table>
+
     <table class="teacher-info-table" style="margin-top: 20px;">
         <tr>
             <th>Payment Method</th>
@@ -259,7 +290,6 @@
         </tr>
     </table>
 
-    <!-- SIGNATURES -->
     <div class="signature-area">
         <div><strong>Teacher's Signature:</strong> _____________</div>
         <div><strong>Vision Owner:</strong> _____________</div>
