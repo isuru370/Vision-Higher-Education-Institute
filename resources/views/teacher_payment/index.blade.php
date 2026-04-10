@@ -69,7 +69,8 @@
                     <div class="card-header bg-primary text-white py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h6 class="card-title mb-0">Teacher Monthly Income - {{ date('F Y') }}</h6>
+                                <h6 class="card-title mb-0">Teacher Monthly Income - <span
+                                        id="headerMonthYear">{{ date('F Y') }}</span></h6>
                                 <small id="recordCount" class="text-white">0 records found</small>
                             </div>
                             <div class="btn-group">
@@ -127,14 +128,17 @@
                                         <th class="py-1 text-end" data-sort="gross_teacher_earning">
                                             <small>Gross Earnings <i class="fas fa-sort"></i></small>
                                         </th>
+                                        <th class="py-1 text-end" data-sort="total_organize_cut">
+                                            <small>Organize Cut <i class="fas fa-sort"></i></small>
+                                        </th>
                                         <th class="py-1 text-end" data-sort="advance_deducted_this_month">
                                             <small>Advance Deducted <i class="fas fa-sort"></i></small>
                                         </th>
                                         <th class="py-1 text-end" data-sort="net_teacher_payable">
                                             <small>Net Payable <i class="fas fa-sort"></i></small>
                                         </th>
-                                        <th class="py-1 text-end">
-                                            <small>Institution Income</small>
+                                        <th class="py-1 text-end" data-sort="institution_income">
+                                            <small>Institution Income <i class="fas fa-sort"></i></small>
                                         </th>
                                         <th class="py-1 text-center">
                                             <small>Actions</small>
@@ -181,8 +185,11 @@
                                     <th class="py-1"><small>Class ID</small></th>
                                     <th class="py-1"><small>Class Name</small></th>
                                     <th class="py-1 text-end"><small>Teacher %</small></th>
+                                    <th class="py-1 text-end"><small>Organize %</small></th>
+                                    <th class="py-1 text-end"><small>Institution %</small></th>
                                     <th class="py-1 text-end"><small>Total Amount</small></th>
                                     <th class="py-1 text-end"><small>Teacher Cut</small></th>
+                                    <th class="py-1 text-end"><small>Organize Cut</small></th>
                                     <th class="py-1 text-end"><small>Institution Cut</small></th>
                                 </tr>
                             </thead>
@@ -191,9 +198,10 @@
                             </tbody>
                             <tfoot id="breakdownTableFooter" class="d-none">
                                 <tr class="table-secondary">
-                                    <td colspan="3" class="py-1"><small><strong>Totals:</strong></small></td>
+                                    <td colspan="5" class="py-1"><small><strong>Totals:</strong></small></td>
                                     <td class="py-1 text-end"><small id="breakdownTotalAmount">LKR 0.00</small></td>
                                     <td class="py-1 text-end"><small id="breakdownTotalTeacherCut">LKR 0.00</small></td>
+                                    <td class="py-1 text-end"><small id="breakdownTotalOrganizeCut">LKR 0.00</small></td>
                                     <td class="py-1 text-end"><small id="breakdownTotalInstitutionCut">LKR 0.00</small></td>
                                 </tr>
                             </tfoot>
@@ -253,7 +261,6 @@
                             <label for="reasonCode" class="form-label"><small>Reason Code *</small></label>
                             <select class="form-control form-control-sm" id="reasonCode" name="reason_code" required>
                                 <option value="">Select a reason...</option>
-                                <!-- Options will be loaded dynamically -->
                             </select>
                             <div class="invalid-feedback" id="reasonCodeError"></div>
                         </div>
@@ -347,8 +354,6 @@
 @push('scripts')
     <!-- Bootstrap 5 JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Font Awesome for icons -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <!-- SheetJS for Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- jsPDF for PDF export -->
@@ -365,7 +370,10 @@
             // Global variables
             let teachersData = [];
             let paymentReasons = [];
-            let currentSort = { column: null, direction: 'asc' };
+            let currentSort = {
+                column: null,
+                direction: 'asc'
+            };
             let advanceModalInstance = null;
             let breakdownModalInstance = null;
 
@@ -380,6 +388,7 @@
             const exportPdfBtn = document.getElementById('exportPdfBtn');
             const recordCount = document.getElementById('recordCount');
             const currentMonthYear = document.getElementById('currentMonthYear');
+            const headerMonthYear = document.getElementById('headerMonthYear');
 
             // Summary elements
             const summaryTotalPayments = document.getElementById('summaryTotalPayments');
@@ -387,7 +396,7 @@
             const summaryNetPayable = document.getElementById('summaryNetPayable');
             const summaryInstitutionIncome = document.getElementById('summaryInstitutionIncome');
 
-            // API Endpoints
+            // API Endpoints (Update these according to your routes)
             const API_ENDPOINTS = {
                 teacherPayments: '/api/teacher-payments/monthly-income',
                 advancePayment: '/api/teacher-payments',
@@ -435,19 +444,87 @@
                 return parseFloat(percentage).toFixed(2).replace(/\.00$/, '') + '%';
             }
 
-            // Format number with commas
-            function formatNumber(number) {
-                if (isNaN(number) || number === null || number === undefined) {
-                    number = 0;
+            // Show alert message
+            function showAlert(message, type = 'info') {
+                const alertTypes = {
+                    'success': {
+                        class: 'alert-success',
+                        icon: 'fa-check-circle'
+                    },
+                    'danger': {
+                        class: 'alert-danger',
+                        icon: 'fa-exclamation-circle'
+                    },
+                    'warning': {
+                        class: 'alert-warning',
+                        icon: 'fa-exclamation-triangle'
+                    },
+                    'info': {
+                        class: 'alert-info',
+                        icon: 'fa-info-circle'
+                    }
+                };
+
+                const alertConfig = alertTypes[type] || alertTypes.info;
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert ${alertConfig.class} alert-dismissible fade show py-2`;
+                alertDiv.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <i class="fas ${alertConfig.icon} me-2"></i>
+                            <div><small>${message}</small></div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    `;
+
+                const cardBody = document.querySelector('.card-body');
+                if (cardBody) {
+                    cardBody.insertBefore(alertDiv, cardBody.firstChild);
+                    setTimeout(() => {
+                        if (alertDiv.parentNode) alertDiv.remove();
+                    }, CONFIG.alertTimeout[type] || CONFIG.alertTimeout.info);
                 }
-                return new Intl.NumberFormat(CONFIG.currency.locale).format(number);
             }
 
-            // Parse currency string to number
-            function parseCurrency(currencyString) {
-                if (!currencyString) return 0;
-                const cleaned = currencyString.replace(/[^\d.-]/g, '');
-                return parseFloat(cleaned) || 0;
+            // Show/hide loading spinner
+            function showLoading(show) {
+                if (!loadingSpinner) return;
+                if (show) {
+                    loadingSpinner.classList.remove('d-none');
+                    if (teacherTableBody) teacherTableBody.innerHTML = '';
+                } else {
+                    loadingSpinner.classList.add('d-none');
+                }
+            }
+
+            // Show/hide empty state
+            function showEmptyState(show) {
+                if (!emptyState) return;
+                if (show) {
+                    emptyState.classList.remove('d-none');
+                } else {
+                    emptyState.classList.add('d-none');
+                }
+            }
+
+            // Update record count
+            function updateRecordCount(count) {
+                if (!recordCount) return;
+                recordCount.textContent = `${count} record${count !== 1 ? 's' : ''} found`;
+            }
+
+            // Update summary cards
+            function updateSummary(data) {
+                if (!summaryTotalPayments || !summaryGrossEarnings || !summaryNetPayable || !summaryInstitutionIncome) return;
+
+                const totalPaymentsSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.total_payments_this_month) || 0), 0);
+                const grossEarningsSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.gross_teacher_earning) || 0), 0);
+                const netPayableSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.net_teacher_payable) || 0), 0);
+                const institutionIncomeSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.institution_income) || 0), 0);
+
+                summaryTotalPayments.textContent = formatCurrency(totalPaymentsSum);
+                summaryGrossEarnings.textContent = formatCurrency(grossEarningsSum);
+                summaryNetPayable.textContent = formatCurrency(netPayableSum);
+                summaryInstitutionIncome.textContent = formatCurrency(institutionIncomeSum);
             }
 
             // Load payment reasons dropdown
@@ -467,8 +544,7 @@
                     }
                 } catch (error) {
                     console.error('Error loading payment reasons:', error);
-                    populateReasonCodes();
-                    showAlert('Using default payment reasons. Some features may be limited.', 'warning');
+                    showAlert('Could not load payment reasons. Please refresh the page.', 'warning');
                 }
             }
 
@@ -479,12 +555,338 @@
 
                 select.innerHTML = '<option value="">Select a reason...</option>';
 
-                paymentReasons.forEach(reason => {
-                    const option = document.createElement('option');
-                    option.value = reason.reason_code || reason.code || reason;
-                    option.textContent = reason.reason_code || reason.code || reason;
-                    select.appendChild(option);
+                if (paymentReasons.length === 0) {
+                    // Default reasons if API fails
+                    const defaultReasons = ['Salary Advance', 'Emergency Advance', 'Personal Advance', 'Other'];
+                    defaultReasons.forEach(reason => {
+                        const option = document.createElement('option');
+                        option.value = reason;
+                        option.textContent = reason;
+                        select.appendChild(option);
+                    });
+                } else {
+                    paymentReasons.forEach(reason => {
+                        const option = document.createElement('option');
+                        option.value = reason.reason_code || reason.code || reason;
+                        option.textContent = reason.reason_code || reason.code || reason;
+                        select.appendChild(option);
+                    });
+                }
+            }
+
+            // Show Breakdown Modal
+            function showBreakdownModal(data) {
+                const breakdownModalElement = document.getElementById('breakdownModal');
+                if (!breakdownModalElement) return;
+
+                const breakdownTeacherInfo = document.getElementById('breakdownTeacherInfo');
+                const breakdownTableBody = document.getElementById('breakdownTableBody');
+                const breakdownTableFooter = document.getElementById('breakdownTableFooter');
+                const noBreakdownData = document.getElementById('noBreakdownData');
+                const breakdownTotalAmount = document.getElementById('breakdownTotalAmount');
+                const breakdownTotalTeacherCut = document.getElementById('breakdownTotalTeacherCut');
+                const breakdownTotalOrganizeCut = document.getElementById('breakdownTotalOrganizeCut');
+                const breakdownTotalInstitutionCut = document.getElementById('breakdownTotalInstitutionCut');
+
+                // Set teacher info
+                if (breakdownTeacherInfo) {
+                    breakdownTeacherInfo.textContent = `Teacher: ${data.teacherName} (ID: ${data.teacherId})`;
+                }
+
+                // Clear previous data
+                if (breakdownTableBody) breakdownTableBody.innerHTML = '';
+
+                if (data.breakdown && data.breakdown.length > 0) {
+                    if (breakdownTableFooter) breakdownTableFooter.classList.remove('d-none');
+                    if (noBreakdownData) noBreakdownData.classList.add('d-none');
+
+                    let totalAmount = 0;
+                    let totalTeacherCut = 0;
+                    let totalOrganizeCut = 0;
+                    let totalInstitutionCut = 0;
+
+                    data.breakdown.forEach(item => {
+                        const classAmount = parseFloat(item.total_amount) || 0;
+                        const teacherCut = parseFloat(item.teacher_cut) || 0;
+                        const organizeCut = parseFloat(item.organize_cut) || 0;
+                        const institutionCut = parseFloat(item.institution_cut) || 0;
+
+                        totalAmount += classAmount;
+                        totalTeacherCut += teacherCut;
+                        totalOrganizeCut += organizeCut;
+                        totalInstitutionCut += institutionCut;
+
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                                <td class="py-1"><small>${item.class_id || ''}</small></td>
+                                <td class="py-1"><small>${item.class_name || ''}</small></td>
+                                <td class="py-1 text-end"><small>${formatPercentage(item.teacher_percentage)}</small></td>
+                                <td class="py-1 text-end"><small>${formatPercentage(item.organize_percentage)}</small></td>
+                                <td class="py-1 text-end"><small>${formatPercentage(100 - (parseFloat(item.teacher_percentage) || 0) - (parseFloat(item.organize_percentage) || 0))}%</small></td>
+                                <td class="py-1 text-end"><small>${formatCurrency(classAmount)}</small></td>
+                                <td class="py-1 text-end"><small>${formatCurrency(teacherCut)}</small></td>
+                                <td class="py-1 text-end"><small>${formatCurrency(organizeCut)}</small></td>
+                                <td class="py-1 text-end"><small>${formatCurrency(institutionCut)}</small></td>
+                            `;
+                        if (breakdownTableBody) breakdownTableBody.appendChild(row);
+                    });
+
+                    if (breakdownTotalAmount) breakdownTotalAmount.textContent = formatCurrency(totalAmount);
+                    if (breakdownTotalTeacherCut) breakdownTotalTeacherCut.textContent = formatCurrency(totalTeacherCut);
+                    if (breakdownTotalOrganizeCut) breakdownTotalOrganizeCut.textContent = formatCurrency(totalOrganizeCut);
+                    if (breakdownTotalInstitutionCut) breakdownTotalInstitutionCut.textContent = formatCurrency(totalInstitutionCut);
+                } else {
+                    if (breakdownTableFooter) breakdownTableFooter.classList.add('d-none');
+                    if (noBreakdownData) noBreakdownData.classList.remove('d-none');
+                }
+
+                // Show modal
+                try {
+                    if (breakdownModalInstance) {
+                        breakdownModalInstance.dispose();
+                    }
+                    breakdownModalInstance = new bootstrap.Modal(breakdownModalElement);
+                    breakdownModalInstance.show();
+                } catch (error) {
+                    console.error('Error showing breakdown modal:', error);
+                    breakdownModalElement.classList.add('show');
+                    breakdownModalElement.style.display = 'block';
+                }
+            }
+
+            // Handle view details click
+            function handleViewDetails(event) {
+                const btn = event.currentTarget;
+                const teacherId = btn.getAttribute('data-teacher-id');
+                const teacherName = btn.getAttribute('data-teacher-name');
+                let breakdown = btn.getAttribute('data-breakdown');
+
+                try {
+                    breakdown = JSON.parse(breakdown);
+                } catch (e) {
+                    breakdown = [];
+                }
+
+                showBreakdownModal({
+                    teacherName: teacherName,
+                    teacherId: teacherId,
+                    breakdown: breakdown
                 });
+            }
+
+            // Attach view details listeners
+            function attachViewDetailsListeners() {
+                document.querySelectorAll('.view-details-btn').forEach(btn => {
+                    btn.removeEventListener('click', handleViewDetails);
+                    btn.addEventListener('click', handleViewDetails);
+                });
+            }
+
+            // Show teacher breakdown (global function for onclick)
+            window.showTeacherBreakdown = function (element) {
+                const row = element.closest('tr');
+                const breakdownData = row?.dataset.breakdown;
+
+                if (breakdownData) {
+                    const data = JSON.parse(breakdownData);
+                    showBreakdownModal(data);
+                }
+            };
+
+            // Show Advance Modal
+            function showAdvanceModal(teacherId, teacherName, teacherEarning) {
+                const advanceModalElement = document.getElementById('advanceModal');
+                if (!advanceModalElement) return;
+
+                const teacherNameInput = document.getElementById('teacherName');
+                const availableEarningInput = document.getElementById('availableEarning');
+                const advanceTeacherIdInput = document.getElementById('advanceTeacherId');
+                const amountInput = document.getElementById('amount');
+                const reasonCodeSelect = document.getElementById('reasonCode');
+
+                if (teacherNameInput) teacherNameInput.value = teacherName || '';
+                if (availableEarningInput) availableEarningInput.value = formatCurrency(teacherEarning);
+                if (advanceTeacherIdInput) advanceTeacherIdInput.value = teacherId || '';
+
+                if (amountInput) {
+                    amountInput.value = '';
+                    amountInput.max = teacherEarning;
+                    amountInput.placeholder = `Max: ${formatCurrency(teacherEarning)}`;
+                    amountInput.classList.remove('is-invalid');
+                }
+
+                if (reasonCodeSelect) {
+                    reasonCodeSelect.value = '';
+                    reasonCodeSelect.classList.remove('is-invalid');
+                }
+
+                const amountError = document.getElementById('amountError');
+                const reasonCodeError = document.getElementById('reasonCodeError');
+                if (amountError) amountError.textContent = '';
+                if (reasonCodeError) reasonCodeError.textContent = '';
+
+                try {
+                    if (advanceModalInstance) advanceModalInstance.dispose();
+                    advanceModalInstance = new bootstrap.Modal(advanceModalElement);
+                    advanceModalInstance.show();
+                } catch (error) {
+                    console.error('Error showing modal:', error);
+                    advanceModalElement.classList.add('show');
+                    advanceModalElement.style.display = 'block';
+                }
+            }
+
+            // Handle advance button click
+            function handleAdvanceClick(event) {
+                const btn = event.currentTarget;
+                if (btn.disabled) return;
+
+                const teacherId = btn.getAttribute('data-teacher-id');
+                const teacherName = btn.getAttribute('data-teacher-name');
+                const teacherEarning = parseFloat(btn.getAttribute('data-teacher-earning')) || 0;
+
+                showAdvanceModal(teacherId, teacherName, teacherEarning);
+            }
+
+            // Attach advance button listeners
+            function attachAdvanceButtonListeners() {
+                document.querySelectorAll('.advance-btn').forEach(btn => {
+                    btn.removeEventListener('click', handleAdvanceClick);
+                    btn.addEventListener('click', handleAdvanceClick);
+                });
+            }
+
+            // Filter table data
+            function filterTable(searchTerm, data) {
+                if (!searchTerm || !data) return data;
+                const term = searchTerm.toLowerCase();
+                return data.filter(teacher => {
+                    const teacherName = (teacher.teacher_name || '').toLowerCase();
+                    const teacherId = (teacher.teacher_id || '').toString().toLowerCase();
+                    return teacherName.includes(term) || teacherId.includes(term);
+                });
+            }
+
+            // Sort table data
+            function sortTable(column, data) {
+                if (!column || !data) return data;
+                return [...data].sort((a, b) => {
+                    let aValue = a[column];
+                    let bValue = b[column];
+
+                    if (column === 'teacher_name') {
+                        aValue = (aValue || '').toLowerCase();
+                        bValue = (bValue || '').toLowerCase();
+                    } else {
+                        aValue = parseFloat(aValue) || 0;
+                        bValue = parseFloat(bValue) || 0;
+                    }
+
+                    if (aValue < bValue) return currentSort.direction === 'asc' ? -1 : 1;
+                    if (aValue > bValue) return currentSort.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            // Render table with data
+            function renderTable(data) {
+                if (!teacherTableBody) return;
+
+                if (!data || data.length === 0) {
+                    showEmptyState(true);
+                    teacherTableBody.innerHTML = '';
+                    return;
+                }
+
+                showEmptyState(false);
+                teacherTableBody.innerHTML = '';
+
+                // Check if we're in the last 5 days of the month
+                const today = new Date();
+                const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                const showPayButton = today.getDate() > (lastDayOfMonth - 25);
+
+                data.forEach(teacher => {
+                    const row = document.createElement('tr');
+
+                    const totalPayments = parseFloat(teacher.total_payments_this_month) || 0;
+                    const grossEarning = parseFloat(teacher.gross_teacher_earning) || 0;
+                    const organizeCut = parseFloat(teacher.total_organize_cut) || 0;
+                    const advanceDeducted = parseFloat(teacher.advance_deducted_this_month) || 0;
+                    const netPayable = parseFloat(teacher.net_teacher_payable) || 0;
+                    const institutionIncome = parseFloat(teacher.institution_income) || 0;
+
+                    const hasBreakdown = teacher.class_wise_breakdown && teacher.class_wise_breakdown.length > 0;
+                    const canAdvance = netPayable > 0 && hasBreakdown;
+
+                    if (hasBreakdown) {
+                        row.dataset.breakdown = JSON.stringify({
+                            teacherName: teacher.teacher_name,
+                            teacherId: teacher.teacher_id,
+                            breakdown: teacher.class_wise_breakdown
+                        });
+                    }
+
+                    row.innerHTML = `
+        <td class="py-1"><small>${teacher.teacher_id || ''}</small></td>
+        <td class="py-1 ${hasBreakdown ? 'cursor-pointer' : ''}" ${hasBreakdown ? 'onclick="window.showTeacherBreakdown(this)"' : ''}>
+            <small>${escapeHtml(teacher.teacher_name || '')}</small>
+            ${hasBreakdown ? '<br><small class="text-primary" style="font-size: 0.7rem;"><i class="fas fa-info-circle"></i> View breakdown</small>' : ''}
+        </td>
+        <td class="py-1 text-end"><small>${formatCurrency(totalPayments)}</small></td>
+        <td class="py-1 text-end"><small>${formatCurrency(grossEarning)}</small></td>
+        <td class="py-1 text-end"><small>${formatCurrency(organizeCut)}</small></td>
+        <td class="py-1 text-end"><small>${formatCurrency(advanceDeducted)}</small></td>
+        <td class="py-1 text-end">
+            <small class="${netPayable > 0 ? 'text-success fw-bold' : ''}">${formatCurrency(netPayable)}</small>
+        </td>
+        <td class="py-1 text-end"><small>${formatCurrency(institutionIncome)}</small></td>
+        <td class="py-1 text-center">
+            <div class="btn-group btn-group-sm" role="group">
+                <!-- View Details Button - Using API_ENDPOINTS -->
+                <a href="${API_ENDPOINTS.viewTeacher(teacher.teacher_id)}" 
+                   class="btn btn-info btn-sm" 
+                   title="View Details">
+                    <i class="fas fa-eye"></i>
+                </a>
+                ${showPayButton ? `
+                <a href="${API_ENDPOINTS.payTeacher(teacher.teacher_id)}" 
+                   class="btn btn-success btn-sm ${netPayable === 0 ? 'disabled' : ''}"
+                   ${netPayable === 0 ? 'aria-disabled="true" title="No payment due"' : 'title="Make Payment"'}>
+                    <i class="fas fa-money-bill-wave"></i>
+                </a>
+                ` : ''}
+                <button type="button" class="btn btn-warning btn-sm advance-btn" 
+                        data-teacher-id="${teacher.teacher_id || ''}"
+                        data-teacher-name="${escapeHtml(teacher.teacher_name || '')}"
+                        data-teacher-earning="${netPayable}"
+                        ${!canAdvance ? 'disabled title="No net payable available"' : 'title="Make Advance Payment"'}>
+                    <i class="fas fa-hand-holding-usd"></i>
+                </button>
+                <a href="${API_ENDPOINTS.payhistory(teacher.teacher_id)}" 
+                   class="btn btn-primary btn-sm" title="Payment History">
+                    <i class="fas fa-history"></i>
+                </a>
+            </div>
+        </td>
+    `;
+
+                    teacherTableBody.appendChild(row);
+                });
+
+                attachViewDetailsListeners();
+                attachAdvanceButtonListeners();
+            }
+
+            // Escape HTML to prevent XSS
+            function escapeHtml(str) {
+                if (!str) return '';
+                return str
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
             // Fetch teacher payments data
@@ -499,7 +901,20 @@
                     const data = await response.json();
 
                     if (data.status === 'success') {
-                        teachersData = data.data || [];
+                        teachersData = Array.isArray(data.data) ? data.data : [];
+
+                        // Update month/year display
+                        if (data.year_month) {
+                            const [year, month] = data.year_month.split('-');
+                            const date = new Date(parseInt(year), parseInt(month) - 1);
+                            const monthYearText = date.toLocaleString('default', {
+                                month: 'long',
+                                year: 'numeric'
+                            });
+                            if (currentMonthYear) currentMonthYear.textContent = monthYearText;
+                            if (headerMonthYear) headerMonthYear.textContent = monthYearText;
+                        }
+
                         renderTable(teachersData);
                         updateSummary(teachersData);
                         updateRecordCount(teachersData.length);
@@ -514,388 +929,6 @@
                     updateRecordCount(0);
                 } finally {
                     showLoading(false);
-                }
-            }
-
-            // Render table with data
-            function renderTable(data) {
-                if (!teacherTableBody) return;
-
-                if (!data || data.length === 0) {
-                    showEmptyState(true);
-                    return;
-                }
-
-                showEmptyState(false);
-                teacherTableBody.innerHTML = '';
-
-                // Check if we're in the last 5 days of the month
-                const showPayButton = isLastFiveDaysOfMonth();
-
-                data.forEach(teacher => {
-                    const row = document.createElement('tr');
-
-                    // Convert string percentages to numbers if needed
-                    const totalPayments = parseFloat(teacher.total_payments_this_month) || 0;
-                    const grossEarning = parseFloat(teacher.gross_teacher_earning) || 0;
-                    const advanceDeducted = parseFloat(teacher.advance_deducted_this_month) || 0;
-                    const netPayable = parseFloat(teacher.net_teacher_payable) || 0;
-                    const institutionIncome = parseFloat(teacher.institution_income) || 0;
-
-                    // Determine if advance button should be enabled
-                    const hasBreakdown = teacher.class_wise_breakdown && teacher.class_wise_breakdown.length > 0;
-                    const canAdvance = netPayable > 0 && hasBreakdown;
-
-                    // Store breakdown data in row dataset
-                    if (hasBreakdown) {
-                        row.dataset.breakdown = JSON.stringify({
-                            teacherName: teacher.teacher_name,
-                            teacherId: teacher.teacher_id,
-                            breakdown: teacher.class_wise_breakdown
-                        });
-                    }
-
-                    row.innerHTML = `
-                                <td class="py-1"><small>${teacher.teacher_id || ''}</small></td>
-                                <td class="py-1 ${hasBreakdown ? 'cursor-pointer' : ''}" ${hasBreakdown ? 'onclick="showTeacherBreakdown(this)"' : ''}>
-                                    <small>${teacher.teacher_name || ''}</small>
-                                    ${hasBreakdown ? '<br><small class="text-primary" style="font-size: 0.75rem;"><i class="fas fa-info-circle"></i> View breakdown</small>' : ''}
-                                </td>
-                                <td class="py-1 text-end"><small>${formatCurrency(totalPayments)}</small></td>
-                                <td class="py-1 text-end"><small>${formatCurrency(grossEarning)}</small></td>
-                                <td class="py-1 text-end"><small>${formatCurrency(advanceDeducted)}</small></td>
-                                <td class="py-1 text-end">
-                                    <small class="${netPayable > 0 ? 'text-success fw-bold' : ''}">${formatCurrency(netPayable)}</small>
-                                </td>
-                                <td class="py-1 text-end"><small>${formatCurrency(institutionIncome)}</small></td>
-                                <td class="py-1 text-center">
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <a href="${API_ENDPOINTS.viewTeacher(teacher.teacher_id)}" 
-                                           class="btn btn-info btn-sm" title="View Details">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        ${showPayButton ? `
-                                        <a href="${API_ENDPOINTS.payTeacher(teacher.teacher_id)}" 
-                                           class="btn btn-success btn-sm ${netPayable === 0 ? 'disabled' : ''}"
-                                           ${netPayable === 0 ? 'aria-disabled="true" title="No payment due"' : 'title="Make Payment"'}
-                                           onclick="return ${netPayable > 0 ? 'true' : 'false'}">
-                                            <i class="fas fa-money-bill-wave"></i>
-                                        </a>
-                                        ` : ''}
-                                        <button type="button" class="btn btn-warning btn-sm advance-btn" 
-                                                data-teacher-id="${teacher.teacher_id || ''}"
-                                                data-teacher-name="${teacher.teacher_name || ''}"
-                                                data-teacher-earning="${netPayable}"
-                                                ${!canAdvance ? 'disabled title="No net payable available"' : 'title="Make Advance Payment"'}>
-                                            <i class="fas fa-hand-holding-usd"></i>
-                                        </button>
-                                        <a href="${API_ENDPOINTS.payhistory(teacher.teacher_id)}" 
-                                           class="btn btn-primary btn-sm" title="Payment History">
-                                            <i class="fas fa-history"></i>
-                                        </a>
-                                    </div>
-                                </td>
-                            `;
-
-                    teacherTableBody.appendChild(row);
-                });
-
-                // Attach event listeners
-                attachAdvanceButtonListeners();
-            }
-
-            // Show teacher breakdown (global function for onclick)
-            window.showTeacherBreakdown = function (element) {
-                const row = element.closest('tr');
-                const breakdownData = row.dataset.breakdown;
-
-                if (breakdownData) {
-                    const data = JSON.parse(breakdownData);
-                    showBreakdownModal(data);
-                }
-            };
-
-            // Show Breakdown Modal
-            function showBreakdownModal(data) {
-                const breakdownModalElement = document.getElementById('breakdownModal');
-                if (!breakdownModalElement) return;
-
-                const breakdownTeacherInfo = document.getElementById('breakdownTeacherInfo');
-                const breakdownTableBody = document.getElementById('breakdownTableBody');
-                const breakdownTableFooter = document.getElementById('breakdownTableFooter');
-                const noBreakdownData = document.getElementById('noBreakdownData');
-                const breakdownTotalAmount = document.getElementById('breakdownTotalAmount');
-                const breakdownTotalTeacherCut = document.getElementById('breakdownTotalTeacherCut');
-                const breakdownTotalInstitutionCut = document.getElementById('breakdownTotalInstitutionCut');
-
-                // Set teacher info
-                breakdownTeacherInfo.textContent = `Teacher: ${data.teacherName} (ID: ${data.teacherId})`;
-
-                // Clear previous data
-                breakdownTableBody.innerHTML = '';
-
-                if (data.breakdown && data.breakdown.length > 0) {
-                    // Show table, hide "no data" message
-                    breakdownTableFooter.classList.remove('d-none');
-                    noBreakdownData.classList.add('d-none');
-
-                    let totalAmount = 0;
-                    let totalTeacherCut = 0;
-                    let totalInstitutionCut = 0;
-
-                    // Populate table rows
-                    data.breakdown.forEach(item => {
-                        const classAmount = parseFloat(item.total_amount) || 0;
-                        const teacherCut = parseFloat(item.teacher_cut) || 0;
-                        const institutionCut = parseFloat(item.institution_cut) || 0;
-
-                        totalAmount += classAmount;
-                        totalTeacherCut += teacherCut;
-                        totalInstitutionCut += institutionCut;
-
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                                    <td class="py-1"><small>${item.class_id || ''}</small></td>
-                                    <td class="py-1"><small>${item.class_name || ''}</small></td>
-                                    <td class="py-1 text-end"><small>${formatPercentage(item.teacher_percentage)}</small></td>
-                                    <td class="py-1 text-end"><small>${formatCurrency(classAmount)}</small></td>
-                                    <td class="py-1 text-end"><small>${formatCurrency(teacherCut)}</small></td>
-                                    <td class="py-1 text-end"><small>${formatCurrency(institutionCut)}</small></td>
-                                `;
-                        breakdownTableBody.appendChild(row);
-                    });
-
-                    // Update totals
-                    breakdownTotalAmount.textContent = formatCurrency(totalAmount);
-                    breakdownTotalTeacherCut.textContent = formatCurrency(totalTeacherCut);
-                    breakdownTotalInstitutionCut.textContent = formatCurrency(totalInstitutionCut);
-                } else {
-                    // Show "no data" message, hide table footer
-                    breakdownTableFooter.classList.add('d-none');
-                    noBreakdownData.classList.remove('d-none');
-                }
-
-                // Show modal
-                try {
-                    if (breakdownModalInstance) {
-                        breakdownModalInstance.dispose();
-                    }
-
-                    breakdownModalInstance = new bootstrap.Modal(breakdownModalElement);
-                    breakdownModalInstance.show();
-                } catch (error) {
-                    console.error('Error showing breakdown modal:', error);
-                    breakdownModalElement.classList.add('show');
-                    breakdownModalElement.style.display = 'block';
-                }
-            }
-
-            // Update summary cards
-            function updateSummary(data) {
-                if (!summaryTotalPayments || !summaryGrossEarnings || !summaryNetPayable || !summaryInstitutionIncome) return;
-
-                const totalPaymentsSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.total_payments_this_month) || 0), 0);
-                const grossEarningsSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.gross_teacher_earning) || 0), 0);
-                const netPayableSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.net_teacher_payable) || 0), 0);
-                const institutionIncomeSum = data.reduce((sum, teacher) => sum + (parseFloat(teacher.institution_income) || 0), 0);
-
-                summaryTotalPayments.textContent = formatCurrency(totalPaymentsSum);
-                summaryGrossEarnings.textContent = formatCurrency(grossEarningsSum);
-                summaryNetPayable.textContent = formatCurrency(netPayableSum);
-                summaryInstitutionIncome.textContent = formatCurrency(institutionIncomeSum);
-            }
-
-            // Update record count
-            function updateRecordCount(count) {
-                if (!recordCount) return;
-                recordCount.textContent = `${count} record${count !== 1 ? 's' : ''} found`;
-            }
-
-            // Show/hide loading spinner
-            function showLoading(show) {
-                if (!loadingSpinner) return;
-
-                if (show) {
-                    loadingSpinner.classList.remove('d-none');
-                    if (teacherTableBody) {
-                        teacherTableBody.innerHTML = '';
-                    }
-                } else {
-                    loadingSpinner.classList.add('d-none');
-                }
-            }
-
-            // Show/hide empty state
-            function showEmptyState(show) {
-                if (!emptyState) return;
-
-                if (show) {
-                    emptyState.classList.remove('d-none');
-                } else {
-                    emptyState.classList.add('d-none');
-                }
-            }
-
-            // Show alert message
-            function showAlert(message, type = 'info') {
-                const alertTypes = {
-                    'success': { class: 'alert-success', icon: 'fa-check-circle' },
-                    'danger': { class: 'alert-danger', icon: 'fa-exclamation-circle' },
-                    'warning': { class: 'alert-warning', icon: 'fa-exclamation-triangle' },
-                    'info': { class: 'alert-info', icon: 'fa-info-circle' }
-                };
-
-                const alertConfig = alertTypes[type] || alertTypes.info;
-
-                const alertDiv = document.createElement('div');
-                alertDiv.className = `alert ${alertConfig.class} alert-dismissible fade show py-2`;
-                alertDiv.innerHTML = `
-                            <div class="d-flex align-items-center">
-                                <i class="fas ${alertConfig.icon} me-2"></i>
-                                <div><small>${message}</small></div>
-                            </div>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        `;
-
-                const cardBody = document.querySelector('.card-body');
-                if (cardBody) {
-                    cardBody.insertBefore(alertDiv, cardBody.firstChild);
-
-                    // Auto remove after timeout
-                    const timeout = CONFIG.alertTimeout[type] || CONFIG.alertTimeout.info;
-                    setTimeout(() => {
-                        if (alertDiv.parentNode) {
-                            try {
-                                const bsAlert = bootstrap.Alert.getOrCreateInstance(alertDiv);
-                                bsAlert.close();
-                            } catch (e) {
-                                alertDiv.remove();
-                            }
-                        }
-                    }, timeout);
-                }
-            }
-
-            // Sort table data
-            function sortTable(column, data) {
-                if (!column || !data) return data;
-
-                return [...data].sort((a, b) => {
-                    let aValue = a[column];
-                    let bValue = b[column];
-
-                    // Handle different data types
-                    if (column === 'teacher_name') {
-                        aValue = (aValue || '').toLowerCase();
-                        bValue = (bValue || '').toLowerCase();
-                    } else if (column === 'teacher_id') {
-                        aValue = parseInt(aValue) || 0;
-                        bValue = parseInt(bValue) || 0;
-                    } else {
-                        // For numeric columns
-                        aValue = parseFloat(aValue) || 0;
-                        bValue = parseFloat(bValue) || 0;
-                    }
-
-                    if (aValue < bValue) return currentSort.direction === 'asc' ? -1 : 1;
-                    if (aValue > bValue) return currentSort.direction === 'asc' ? 1 : -1;
-                    return 0;
-                });
-            }
-
-            // Filter table data
-            function filterTable(searchTerm, data) {
-                if (!searchTerm || !data) return data;
-
-                const term = searchTerm.toLowerCase();
-                return data.filter(teacher => {
-                    const teacherName = (teacher.teacher_name || '').toLowerCase();
-                    const teacherId = (teacher.teacher_id || '').toString().toLowerCase();
-                    return teacherName.includes(term) || teacherId.includes(term);
-                });
-            }
-
-            // Attach event listeners to advance buttons
-            function attachAdvanceButtonListeners() {
-                // Use event delegation on the table body
-                if (teacherTableBody) {
-                    teacherTableBody.addEventListener('click', function (event) {
-                        const advanceBtn = event.target.closest('.advance-btn');
-                        if (advanceBtn && !advanceBtn.disabled) {
-                            event.preventDefault();
-                            event.stopPropagation();
-
-                            const teacherId = advanceBtn.getAttribute('data-teacher-id');
-                            const teacherName = advanceBtn.getAttribute('data-teacher-name');
-                            const teacherEarning = parseFloat(advanceBtn.getAttribute('data-teacher-earning')) || 0;
-
-                            showAdvanceModal(teacherId, teacherName, teacherEarning);
-                        }
-                    });
-                }
-            }
-
-            // Show Advance Modal
-            function showAdvanceModal(teacherId, teacherName, teacherEarning) {
-                // Get modal element
-                const advanceModalElement = document.getElementById('advanceModal');
-                if (!advanceModalElement) return;
-
-                // Set values in the modal inputs
-                const teacherNameInput = document.getElementById('teacherName');
-                const availableEarningInput = document.getElementById('availableEarning');
-                const advanceTeacherIdInput = document.getElementById('advanceTeacherId');
-                const amountInput = document.getElementById('amount');
-                const reasonCodeSelect = document.getElementById('reasonCode');
-
-                // Set values
-                if (teacherNameInput) teacherNameInput.value = teacherName || '';
-                if (availableEarningInput) availableEarningInput.value = formatCurrency(teacherEarning);
-                if (advanceTeacherIdInput) advanceTeacherIdInput.value = teacherId || '';
-
-                // Configure amount input
-                if (amountInput) {
-                    amountInput.value = '';
-                    amountInput.max = teacherEarning;
-                    amountInput.placeholder = `Max: ${formatCurrency(teacherEarning)}`;
-                    amountInput.classList.remove('is-invalid');
-                }
-
-                // Reset reason code
-                if (reasonCodeSelect) {
-                    reasonCodeSelect.value = '';
-                    reasonCodeSelect.classList.remove('is-invalid');
-                }
-
-                // Clear validation messages
-                const amountError = document.getElementById('amountError');
-                const reasonCodeError = document.getElementById('reasonCodeError');
-                if (amountError) amountError.textContent = '';
-                if (reasonCodeError) reasonCodeError.textContent = '';
-
-                // Show modal
-                try {
-                    if (advanceModalInstance) {
-                        advanceModalInstance.dispose();
-                    }
-
-                    advanceModalInstance = new bootstrap.Modal(advanceModalElement, {
-                        backdrop: 'static',
-                        keyboard: false
-                    });
-
-                    advanceModalInstance.show();
-
-                    // Focus on amount input
-                    advanceModalElement.addEventListener('shown.bs.modal', function () {
-                        if (amountInput) {
-                            setTimeout(() => amountInput.focus(), 100);
-                        }
-                    });
-                } catch (error) {
-                    console.error('Error showing modal:', error);
-                    advanceModalElement.classList.add('show');
-                    advanceModalElement.style.display = 'block';
                 }
             }
 
@@ -916,42 +949,38 @@
                     const reasonCodeSelect = document.getElementById('reasonCode');
                     const reasonCode = reasonCodeSelect?.value || '';
 
-                    // Reset validation
                     if (amountInput) amountInput.classList.remove('is-invalid');
                     if (reasonCodeSelect) reasonCodeSelect.classList.remove('is-invalid');
 
-                    // Validation
                     let isValid = true;
 
-                    // Amount validation
                     if (!amount || amount <= 0) {
                         if (amountInput) {
                             amountInput.classList.add('is-invalid');
-                            document.getElementById('amountError').textContent = 'Please enter a valid amount';
+                            const errorEl = document.getElementById('amountError');
+                            if (errorEl) errorEl.textContent = 'Please enter a valid amount';
                         }
                         isValid = false;
                     } else if (amount > maxAmount) {
                         if (amountInput) {
                             amountInput.classList.add('is-invalid');
-                            document.getElementById('amountError').textContent = `Amount cannot exceed ${formatCurrency(maxAmount)}`;
+                            const errorEl = document.getElementById('amountError');
+                            if (errorEl) errorEl.textContent = `Amount cannot exceed ${formatCurrency(maxAmount)}`;
                         }
                         isValid = false;
                     }
 
-                    // Reason code validation
                     if (!reasonCode) {
                         if (reasonCodeSelect) {
                             reasonCodeSelect.classList.add('is-invalid');
-                            document.getElementById('reasonCodeError').textContent = 'Please select a reason code';
+                            const errorEl = document.getElementById('reasonCodeError');
+                            if (errorEl) errorEl.textContent = 'Please select a reason code';
                         }
                         isValid = false;
                     }
 
-                    if (!isValid) {
-                        return;
-                    }
+                    if (!isValid) return;
 
-                    // Prepare data
                     const formData = {
                         teacher_id: teacherId,
                         payment: amount,
@@ -959,13 +988,11 @@
                     };
 
                     try {
-                        // Show loading
                         if (submitBtn) {
                             submitBtn.disabled = true;
                             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> <small>Processing...</small>';
                         }
 
-                        // Make API request
                         const response = await fetch(API_ENDPOINTS.advancePayment, {
                             method: 'POST',
                             headers: {
@@ -984,18 +1011,9 @@
                         }
 
                         if (data.status === 'success') {
-                            // Close modal
-                            if (advanceModalInstance) {
-                                advanceModalInstance.hide();
-                            }
-
-                            // Show success message
+                            if (advanceModalInstance) advanceModalInstance.hide();
                             showAlert(data.message || 'Advance payment submitted successfully!', 'success');
-
-                            // Refresh data after a delay
-                            setTimeout(() => {
-                                fetchTeacherPayments();
-                            }, 1500);
+                            setTimeout(() => fetchTeacherPayments(), 1500);
                         } else {
                             throw new Error(data.message || 'Failed to submit advance payment');
                         }
@@ -1003,7 +1021,6 @@
                         console.error('Error submitting advance payment:', error);
                         showAlert(error.message || 'Failed to submit advance payment. Please try again.', 'danger');
                     } finally {
-                        // Reset button
                         if (submitBtn) {
                             submitBtn.disabled = false;
                             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span> <small>Submit Advance</small>';
@@ -1015,7 +1032,6 @@
             // Export to Excel
             function setupExportExcel() {
                 if (!exportExcelBtn) return;
-
                 exportExcelBtn.addEventListener('click', function () {
                     if (!teachersData || teachersData.length === 0) {
                         showAlert('No data to export', 'warning');
@@ -1023,32 +1039,23 @@
                     }
 
                     try {
-                        // Prepare data for export
                         const exportData = teachersData.map(teacher => ({
                             'Teacher ID': teacher.teacher_id || '',
                             'Teacher Name': teacher.teacher_name || '',
                             'Total Payments': parseFloat(teacher.total_payments_this_month) || 0,
                             'Gross Earnings': parseFloat(teacher.gross_teacher_earning) || 0,
+                            'Organize Cut': parseFloat(teacher.total_organize_cut) || 0,
                             'Advance Deducted': parseFloat(teacher.advance_deducted_this_month) || 0,
                             'Net Payable': parseFloat(teacher.net_teacher_payable) || 0,
                             'Institution Income': parseFloat(teacher.institution_income) || 0,
                             'Classes Count': teacher.class_wise_breakdown?.length || 0
                         }));
 
-                        // Create worksheet
                         const ws = XLSX.utils.json_to_sheet(exportData);
-
-                        // Create workbook
                         const wb = XLSX.utils.book_new();
                         XLSX.utils.book_append_sheet(wb, ws, 'Teacher Payments');
-
-                        // Generate filename with timestamp
                         const timestamp = new Date().toISOString().split('T')[0];
-                        const filename = `teacher_payments_${timestamp}.xlsx`;
-
-                        // Generate Excel file
-                        XLSX.writeFile(wb, filename);
-
+                        XLSX.writeFile(wb, `teacher_payments_${timestamp}.xlsx`);
                         showAlert('Excel file exported successfully!', 'success');
                     } catch (error) {
                         console.error('Error exporting to Excel:', error);
@@ -1060,7 +1067,6 @@
             // Export to PDF
             function setupExportPdf() {
                 if (!exportPdfBtn) return;
-
                 exportPdfBtn.addEventListener('click', function () {
                     if (!teachersData || teachersData.length === 0) {
                         showAlert('No data to export', 'warning');
@@ -1071,41 +1077,43 @@
                         const { jsPDF } = window.jspdf;
                         const doc = new jsPDF('landscape');
 
-                        // Title
                         doc.setFontSize(12);
                         doc.text('Teacher Payments Report', 14, 15);
                         doc.setFontSize(8);
-                        doc.text(`Month: ${currentMonthYear.textContent}`, 14, 22);
+                        doc.text(`Month: ${currentMonthYear?.textContent || ''}`, 14, 22);
                         doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 27);
 
-                        // Prepare data for table
                         const tableData = teachersData.map(teacher => [
                             teacher.teacher_id || '',
                             teacher.teacher_name || '',
                             formatCurrency(parseFloat(teacher.total_payments_this_month) || 0),
                             formatCurrency(parseFloat(teacher.gross_teacher_earning) || 0),
+                            formatCurrency(parseFloat(teacher.total_organize_cut) || 0),
                             formatCurrency(parseFloat(teacher.advance_deducted_this_month) || 0),
                             formatCurrency(parseFloat(teacher.net_teacher_payable) || 0),
                             formatCurrency(parseFloat(teacher.institution_income) || 0)
                         ]);
 
-                        // Add table
                         doc.autoTable({
-                            head: [['ID', 'Name', 'Total Payments', 'Gross Earnings', 'Advance Deducted', 'Net Payable', 'Institution Income']],
+                            head: [
+                                ['ID', 'Name', 'Total Payments', 'Gross Earnings', 'Organize Cut', 'Advance Deducted', 'Net Payable', 'Institution Income']
+                            ],
                             body: tableData,
                             startY: 35,
-                            styles: { fontSize: 7 },
-                            headStyles: { fillColor: [13, 110, 253], textColor: [255, 255, 255] },
-                            margin: { top: 30 }
+                            styles: {
+                                fontSize: 7
+                            },
+                            headStyles: {
+                                fillColor: [13, 110, 253],
+                                textColor: [255, 255, 255]
+                            },
+                            margin: {
+                                top: 30
+                            }
                         });
 
-                        // Generate filename with timestamp
                         const timestamp = new Date().toISOString().split('T')[0];
-                        const filename = `teacher_payments_${timestamp}.pdf`;
-
-                        // Save PDF
-                        doc.save(filename);
-
+                        doc.save(`teacher_payments_${timestamp}.pdf`);
                         showAlert('PDF file exported successfully!', 'success');
                     } catch (error) {
                         console.error('Error exporting to PDF:', error);
@@ -1117,18 +1125,12 @@
             // Setup search functionality
             function setupSearch() {
                 if (!teacherSearch) return;
-
                 let searchTimeout;
                 teacherSearch.addEventListener('input', function () {
                     clearTimeout(searchTimeout);
                     searchTimeout = setTimeout(() => {
                         const searchTerm = this.value.trim();
-                        let filteredData = teachersData;
-
-                        if (searchTerm) {
-                            filteredData = filterTable(searchTerm, teachersData);
-                        }
-
+                        const filteredData = searchTerm ? filterTable(searchTerm, teachersData) : teachersData;
                         renderTable(filteredData);
                         updateSummary(filteredData);
                         updateRecordCount(filteredData.length);
@@ -1139,25 +1141,20 @@
             // Setup clear search
             function setupClearSearch() {
                 if (!clearSearch) return;
-
                 clearSearch.addEventListener('click', function () {
-                    if (teacherSearch) {
-                        teacherSearch.value = '';
-                        renderTable(teachersData);
-                        updateSummary(teachersData);
-                        updateRecordCount(teachersData.length);
-                    }
+                    if (teacherSearch) teacherSearch.value = '';
+                    renderTable(teachersData);
+                    updateSummary(teachersData);
+                    updateRecordCount(teachersData.length);
                 });
             }
 
             // Setup refresh button
             function setupRefreshButton() {
                 if (!refreshBtn) return;
-
                 refreshBtn.addEventListener('click', function () {
                     this.disabled = true;
-                    this.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i>';
-
+                    this.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Refresh';
                     fetchTeacherPayments().finally(() => {
                         setTimeout(() => {
                             this.disabled = false;
@@ -1170,14 +1167,11 @@
             // Setup table sorting
             function setupTableSorting() {
                 const sortableHeaders = document.querySelectorAll('th[data-sort]');
-                if (!sortableHeaders.length) return;
-
                 sortableHeaders.forEach(th => {
                     th.addEventListener('click', function () {
                         const column = this.getAttribute('data-sort');
                         if (!column) return;
 
-                        // Update sort direction
                         if (currentSort.column === column) {
                             currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
                         } else {
@@ -1185,82 +1179,46 @@
                             currentSort.direction = 'asc';
                         }
 
-                        // Update sort icons
                         document.querySelectorAll('th[data-sort] i').forEach(icon => {
                             icon.className = 'fas fa-sort';
                         });
 
                         const sortIcon = this.querySelector('i');
                         if (sortIcon) {
-                            sortIcon.className = currentSort.direction === 'asc'
-                                ? 'fas fa-sort-up'
-                                : 'fas fa-sort-down';
+                            sortIcon.className = currentSort.direction === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
                         }
 
-                        // Sort and render data
                         const sortedData = sortTable(column, teachersData);
                         renderTable(sortedData);
                     });
                 });
             }
 
-            // Check if last 5 days of month
-            function isLastFiveDaysOfMonth() {
-                const today = new Date();
-                const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-                const currentDay = today.getDate();
-
-                return currentDay > (lastDayOfMonth - 5);
-            }
-
             // Initialize everything
             function init() {
                 console.log('Initializing Teacher Payments module...');
 
-                // Check if Bootstrap is loaded
                 if (typeof bootstrap === 'undefined') {
-                    console.error('Bootstrap is not loaded. Please check the Bootstrap CDN.');
+                    console.error('Bootstrap is not loaded');
                     showAlert('Required components failed to load. Please refresh the page.', 'danger');
                     return;
                 }
 
-                // Check for required elements
-                const requiredElements = [
-                    'teacherTableBody', 'loadingSpinner', 'emptyState',
-                    'summaryTotalPayments', 'summaryGrossEarnings', 'summaryNetPayable'
-                ];
+                setupAdvancePaymentForm();
+                setupExportExcel();
+                setupExportPdf();
+                setupSearch();
+                setupClearSearch();
+                setupRefreshButton();
+                setupTableSorting();
 
-                const missingElements = requiredElements.filter(id => !document.getElementById(id));
-                if (missingElements.length > 0) {
-                    console.error('Missing required elements:', missingElements);
-                    showAlert('Page failed to load properly. Please refresh.', 'danger');
-                    return;
-                }
-
-                // Setup all event listeners
-                try {
-                    setupAdvancePaymentForm();
-                    setupExportExcel();
-                    setupExportPdf();
-                    setupSearch();
-                    setupClearSearch();
-                    setupRefreshButton();
-                    setupTableSorting();
-
-                    // Load initial data
-                    Promise.all([
-                        fetchTeacherPayments(),
-                        loadPaymentReasons()
-                    ]).catch(error => {
-                        console.error('Error during initialization:', error);
-                        showAlert('Failed to initialize page. Please refresh.', 'danger');
-                    });
-
-                    console.log('Teacher Payments module initialized successfully');
-                } catch (error) {
+                Promise.all([
+                    fetchTeacherPayments(),
+                    loadPaymentReasons()
+                ]).catch(error => {
                     console.error('Error during initialization:', error);
                     showAlert('Failed to initialize page. Please refresh.', 'danger');
-                }
+                });
             }
 
             // Start when DOM is ready
@@ -1269,17 +1227,6 @@
             } else {
                 init();
             }
-
-            // Global error handling
-            window.addEventListener('error', function (event) {
-                console.error('Global error:', event.error);
-            });
-
-            window.addEventListener('unhandledrejection', function (event) {
-                console.error('Unhandled promise rejection:', event.reason);
-                showAlert('An unexpected error occurred. Please try again.', 'danger');
-            });
-
         })();
     </script>
 @endpush

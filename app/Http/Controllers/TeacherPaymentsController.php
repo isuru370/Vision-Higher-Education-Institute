@@ -38,29 +38,73 @@ class TeacherPaymentsController extends Controller
 
 
 
-    public function fetchTeacherPaymentsDaily()
+    public function fetchTeacherPaymentsDaily(Request $request)
     {
-        $response = $this->teacherPaymentsService->fetchTeacherPaymentsDaily();
-        $result = $response->getData(true);
+        try {
+            $response = $this->teacherPaymentsService->fetchTeacherPaymentsDaily();
+            $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('reports.pdf.daily-payments', [
-            'data' => $result['data'] ?? [],
-            'day'  => $request->day ?? now()->toDateString(),
-        ]);
+            // check success
+            if (($result['status'] ?? 'error') !== 'success') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $result['message'] ?? 'Failed to fetch daily payments.'
+                ], $response->getStatusCode());
+            }
 
-        return $pdf->download('daily-teacher-payments.pdf');
+            $data = $result['data'] ?? [];
+            $yearMonth = $result['year_month'] ?? now()->format('Y-m');
+            $daysInMonth = $result['days_in_month'] ?? now()->daysInMonth;
+
+            $filename = "daily_teacher_payments_{$yearMonth}.pdf";
+
+            $pdf = Pdf::loadView('reports.pdf.daily-payments', [
+                'data' => $data,
+                'year_month' => $yearMonth,
+                'days_in_month' => $daysInMonth,
+            ]);
+
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate daily PDF report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function fetchTeacherPaymentsWeekly()
     {
-        $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeekly();
-        $result = $response->getData(true);
+        try {
+            $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeekly();
+            $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('reports.pdf.weekly-payments', [
-            'data' => $result['data'] ?? [],
-        ]);
+            if (($result['status'] ?? 'error') !== 'success') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $result['message'] ?? 'Failed to fetch weekly payments.'
+                ], $response->getStatusCode());
+            }
 
-        return $pdf->download('weekly-teacher-payments.pdf');
+            $data = $result['data'] ?? [];
+            $yearMonth = $result['year_month'] ?? now()->format('Y-m');
+
+            $filename = "weekly_teacher_payments_{$yearMonth}.pdf";
+
+            $pdf = Pdf::loadView('reports.pdf.weekly-payments', [
+                'data' => $data,
+                'year_month' => $yearMonth,
+            ]);
+
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate weekly PDF report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function fetchTeacherPaymentsDailyByTeacher(Request $request)
@@ -68,26 +112,78 @@ class TeacherPaymentsController extends Controller
         $response = $this->teacherPaymentsService->fetchTeacherPaymentsDailyByTeacher($request);
         $result = $response->getData(true);
 
+        // Get teacher name from the data
+        $teacherName = $result['data']['teacher_name'] ?? 'teacher';
+        $date = $result['date'] ?? $request->day ?? date('Y-m-d');
+
+        // Clean teacher name for filename (remove special characters, replace spaces with underscore)
+        $cleanTeacherName = preg_replace('/[^A-Za-z0-9]/', '_', $teacherName);
+        $cleanTeacherName = preg_replace('/_+/', '_', $cleanTeacherName);
+        $cleanTeacherName = trim($cleanTeacherName, '_');
+
+        // Format date for filename
+        $formattedDate = str_replace('-', '_', $date);
+
+        // Generate filename
+        $filename = "daily_teacher_payment_{$cleanTeacherName}_{$formattedDate}.pdf";
+
         $pdf = Pdf::loadView('reports.pdf.daily-teacher-payment', [
             'data' => $result['data'] ?? [],
-            'date' => $result['date'] ?? $request->day,
+            'date' => $date,
         ]);
 
-        return $pdf->download('daily-teacher-payment.pdf');
+        return $pdf->download($filename);
     }
 
     public function fetchTeacherPaymentsWeeklyByTeacher(Request $request)
     {
-        $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeeklyByTeacher($request);
-        $result = $response->getData(true);
+        try {
+            $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeeklyByTeacher($request);
+            $result = $response->getData(true);
 
-        $pdf = Pdf::loadView('reports.pdf.weekly-teacher-payment', [
-            'data' => $result['data'] ?? [],
-            'start_date' => $result['start_date'] ?? $request->start_date,
-            'end_date'   => $result['end_date'] ?? $request->end_date,
-        ]);
+            // Check if service returned success
+            if (($result['status'] ?? 'error') !== 'success') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $result['message'] ?? 'Failed to fetch weekly teacher payment report.'
+                ], $response->getStatusCode());
+            }
 
-        return $pdf->download('weekly-teacher-payment.pdf');
+            $data = $result['data'] ?? [];
+            $teacherName = $data['teacher_name'] ?? 'teacher';
+            $startDate = $result['start_date'] ?? $request->start_date ?? date('Y-m-d');
+            $endDate = $result['end_date'] ?? $request->end_date ?? date('Y-m-d');
+
+            // Clean teacher name for filename
+            $cleanTeacherName = preg_replace('/[^A-Za-z0-9]/', '_', $teacherName);
+            $cleanTeacherName = preg_replace('/_+/', '_', $cleanTeacherName);
+            $cleanTeacherName = trim($cleanTeacherName, '_');
+
+            if (empty($cleanTeacherName)) {
+                $cleanTeacherName = 'teacher';
+            }
+
+            // Format dates for filename
+            $formattedStartDate = str_replace('-', '_', $startDate);
+            $formattedEndDate = str_replace('-', '_', $endDate);
+
+            // Generate filename
+            $filename = "weekly_teacher_payment_{$cleanTeacherName}_{$formattedStartDate}_to_{$formattedEndDate}.pdf";
+
+            $pdf = Pdf::loadView('reports.pdf.weekly-teacher-payment', [
+                'data' => $data,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ]);
+
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to generate weekly PDF report.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function studentPaymentMonthCheck($teacherId, $yearMonth)
@@ -97,12 +193,16 @@ class TeacherPaymentsController extends Controller
     public function showSalarySlip($teacherId, $yearMonth)
     {
         try {
-            // Get data FROM SERVICE (returns ARRAY)
-            $data = $this->teacherPaymentsService->fetchSalarySlipData($teacherId, $yearMonth);
+            $data = $this->teacherPaymentsService
+                ->fetchSalarySlipData($teacherId, $yearMonth);
 
-            // Pass $data to Blade
+            if (($data['status'] ?? 'error') !== 'success') {
+                return view('teacher_payment.salary-slip-exact', ['data' => $data]);
+            }
+
             return view('teacher_payment.salary-slip-exact', ['data' => $data]);
         } catch (\Exception $e) {
+
             return view('teacher_payment.salary-slip-exact', [
                 'data' => [
                     'status' => 'error',
@@ -113,7 +213,6 @@ class TeacherPaymentsController extends Controller
             ]);
         }
     }
-
 
 
 
