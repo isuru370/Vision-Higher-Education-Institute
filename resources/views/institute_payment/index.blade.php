@@ -154,12 +154,28 @@
                                             <div class="d-flex align-items-center">
                                                 <div class="flex-shrink-0">
                                                     <div class="icon-wrapper bg-warning bg-opacity-25 p-3 rounded">
-                                                        <i class="fas fa-money-bill-wave text-warning fa-lg"></i>
+                                                        <i class="fas fa-chart-line text-warning fa-lg"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="flex-grow-1 ms-3">
+                                                    <small class="text-muted d-block">Total Organizer Income</small>
+                                                    <div class="h5 mb-0 fw-bold text-warning" id="totalOrganizerIncome">Rs --
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="stat-card bg-primary bg-opacity-10 p-3 rounded border">
+                                            <div class="d-flex align-items-center">
+                                                <div class="flex-shrink-0">
+                                                    <div class="icon-wrapper bg-primary bg-opacity-25 p-3 rounded">
+                                                        <i class="fas fa-calculator text-primary fa-lg"></i>
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">
                                                     <small class="text-muted d-block">Avg. Net Earning/Teacher</small>
-                                                    <div class="h5 mb-0 fw-bold text-warning" id="avgNetEarningTeacher">Rs
+                                                    <div class="h5 mb-0 fw-bold text-primary" id="avgNetEarningTeacher">Rs
                                                         --
                                                     </div>
                                                 </div>
@@ -216,17 +232,19 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th width="3%" class="py-2 px-3">#</th>
-                                        <th width="20%" class="py-2 px-3">Teacher</th>
-                                        <th width="12%" class="py-2 px-3 text-end">Payments</th>
-                                        <th width="12%" class="py-2 px-3 text-end">Teacher Salary</th>
-                                        <th width="12%" class="py-2 px-3 text-end">Advance</th>
-                                        <th width="12%" class="py-2 px-3 text-end">Net Salary</th>
+                                        <th width="18%" class="py-2 px-3">Teacher</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Payments</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Teacher Earning</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Organizer Income</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Institute Income</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Advance</th>
+                                        <th width="10%" class="py-2 px-3 text-end">Net Salary</th>
                                         <th width="9%" class="py-2 px-3 text-end">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="teacherIncomeBody">
                                     <tr>
-                                        <td colspan="7" class="text-center py-4">
+                                        <td colspan="9" class="text-center py-4">
                                             <div class="spinner-border spinner-border-sm text-primary" role="status">
                                                 <span class="visually-hidden">Loading...</span>
                                             </div>
@@ -390,6 +408,11 @@
             --card-color-light: #ffd96a;
         }
 
+        .stat-card.organizer-income {
+            --card-color: #e74a3b;
+            --card-color-light: #ff7b6b;
+        }
+
         .stat-card.total-with-extra {
             --card-color: #e74a3b;
             --card-color-light: #ff7b6b;
@@ -537,6 +560,11 @@
         .net-earning-negative {
             color: #dc3545 !important;
             font-weight: 600;
+        }
+
+        /* Organizer Income Color */
+        .organizer-income {
+            color: #e74a3b !important;
         }
 
         /* Responsive */
@@ -720,7 +748,7 @@
 
                 $('#teacherIncomeBody').html(`
                     <tr>
-                        <td colspan="7" class="text-center py-4">
+                        <td colspan="9" class="text-center py-4">
                             <div class="spinner-border spinner-border-sm text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
@@ -736,7 +764,7 @@
             function displaySummaryCards(data) {
                 const summary = data.summary || data;
 
-                // Data for summary cards - Updated to match new backend response
+                // Data for summary cards - Updated with Organizer Income
                 const summaryCardsData = [
                     {
                         label: 'Total Payments',
@@ -753,6 +781,14 @@
                         color: 'success',
                         cardClass: 'teacher-earnings',
                         iconClass: 'text-success'
+                    },
+                    {
+                        label: 'Organizer Income',
+                        value: summary.total_organizer_income || 0,
+                        icon: 'chart-line',
+                        color: 'danger',
+                        cardClass: 'organizer-income',
+                        iconClass: 'text-danger'
                     },
                     {
                         label: 'Teacher Advances',
@@ -956,6 +992,11 @@
                                 --card-color-light: #ffd96a;
                             }
 
+                            .stat-card.organizer-income {
+                                --card-color: #e74a3b;
+                                --card-color-light: #ff7b6b;
+                            }
+
                             .stat-card.total-with-extra {
                                 --card-color: #e74a3b;
                                 --card-color-light: #ff7b6b;
@@ -1097,16 +1138,18 @@
                         <tr>
                             <td class="px-3">${globalIndex}</td>
                             <td class="px-3">
-                                <div class="fw-semibold">${teacher.teacher_name}</div>
+                                <div class="fw-semibold">${escapeHtml(teacher.teacher_name)}</div>
                                 <small class="text-muted">ID: ${teacher.teacher_id}</small>
                             </td>
                             <td class="text-end px-3">${formatCurrency(teacher.total_payments_this_month)}</td>
                             <td class="text-end text-success px-3">${formatCurrency(teacher.teacher_total_earning)}</td>
+                            <td class="text-end text-danger px-3">${formatCurrency(teacher.organizer_total_income)}</td>
+                            <td class="text-end text-primary px-3">${formatCurrency(teacher.institution_total_income)}</td>
                             <td class="text-end text-purple px-3">${formatCurrency(teacher.teacher_advance)}</td>
                             <td class="text-end px-3 ${netEarningClass}">${formatCurrency(teacher.teacher_net_earning)}</td>
                             <td class="px-3 text-center">
                                 <button class="btn btn-outline-primary btn-sm view-classes" 
-                                        data-teacher="${teacher.teacher_name}"
+                                        data-teacher="${escapeHtml(teacher.teacher_name)}"
                                         data-classes='${JSON.stringify(teacher.class_wise_totals)}'>
                                     <i class="fas fa-eye"></i>
                                 </button>
@@ -1196,9 +1239,10 @@
 
                 const summary = data.summary || data;
 
-                // Include all components in the chart
+                // Include all components in the chart including Organizer Income
                 const chartData = {
                     teacherEarnings: summary.total_teacher_earnings || 0,
+                    organizerIncome: summary.total_organizer_income || 0,
                     teacherAdvances: summary.total_teacher_advances || 0,
                     teacherSalaries: summary.total_teacher_salaries || 0,
                     instituteIncome: summary.total_institute_from_classes || 0,
@@ -1206,9 +1250,9 @@
                     expenses: summary.total_institute_expenese || 0
                 };
 
-                const total = chartData.teacherEarnings + chartData.teacherAdvances +
-                    chartData.teacherSalaries + chartData.instituteIncome +
-                    chartData.extraIncome + chartData.expenses;
+                const total = chartData.teacherEarnings + chartData.organizerIncome +
+                    chartData.teacherAdvances + chartData.teacherSalaries + 
+                    chartData.instituteIncome + chartData.extraIncome + chartData.expenses;
 
                 if (total === 0) {
                     $('#chartNoData').removeClass('d-none');
@@ -1222,11 +1266,12 @@
                 chartInstance = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['Teacher Earnings', 'Teacher Advances', 'Teacher Salaries',
-                                'Institute Income', 'Extra Income', 'Expenses'],
+                        labels: ['Teacher Earnings', 'Organizer Income', 'Teacher Advances', 
+                                'Teacher Salaries', 'Institute Income', 'Extra Income', 'Expenses'],
                         datasets: [{
                             data: [
                                 chartData.teacherEarnings,
+                                chartData.organizerIncome,
                                 chartData.teacherAdvances,
                                 chartData.teacherSalaries,
                                 chartData.instituteIncome,
@@ -1235,6 +1280,7 @@
                             ],
                             backgroundColor: [
                                 'rgba(40, 167, 69, 0.8)',    // Green for teacher earnings
+                                'rgba(231, 74, 59, 0.8)',    // Red for organizer income
                                 'rgba(111, 66, 193, 0.8)',   // Purple for teacher advances
                                 'rgba(253, 126, 20, 0.8)',   // Orange for teacher salaries
                                 'rgba(255, 193, 7, 0.8)',    // Yellow for institute income
@@ -1243,6 +1289,7 @@
                             ],
                             borderColor: [
                                 'rgba(40, 167, 69, 1)',
+                                'rgba(231, 74, 59, 1)',
                                 'rgba(111, 66, 193, 1)',
                                 'rgba(253, 126, 20, 1)',
                                 'rgba(255, 193, 7, 1)',
@@ -1307,6 +1354,7 @@
 
                 $('#activeTeachers').text(activeTeachers);
                 $('#totalClasses').text(totalClasses);
+                $('#totalOrganizerIncome').text('Rs ' + formatNumber(summary.total_organizer_income || 0));
                 $('#avgNetEarningTeacher').text('Rs ' + formatNumber(avgNetEarningTeacher));
             }
 
@@ -1341,7 +1389,7 @@
             }
 
             function showClassDetails(teacherName, classes) {
-                let html = `<h6 class="mb-3">${teacherName}</h6>`;
+                let html = `<h6 class="mb-3">${escapeHtml(teacherName)}</h6>`;
 
                 if (!classes || classes.length === 0 || classes[0].class_id === null) {
                     html += `<div class="alert alert-warning py-2"><small>No class data</small></div>`;
@@ -1352,29 +1400,34 @@
                                 <thead class="table-light">
                                     <tr>
                                         <th><small>Class</small></th>
-                                        <th class="text-end"><small>Percentage</small></th>
+                                        <th class="text-end"><small>Teacher %</small></th>
+                                        <th class="text-end"><small>Organizer %</small></th>
                                         <th class="text-end"><small>Total Amount</small></th>
                                         <th class="text-end"><small>Teacher Earning</small></th>
+                                        <th class="text-end"><small>Organizer Income</small></th>
                                         <th class="text-end"><small>Institute Income</small></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                     `;
 
-                    let totalAmount = 0, totalTeacher = 0, totalInstitute = 0;
+                    let totalAmount = 0, totalTeacher = 0, totalOrganizer = 0, totalInstitute = 0;
 
                     classes.forEach(cls => {
                         if (cls.class_id !== null) { // Only show valid classes
                             totalAmount += parseFloat(cls.total_amount || 0);
                             totalTeacher += parseFloat(cls.teacher_earning || 0);
+                            totalOrganizer += parseFloat(cls.organizer_income || 0);
                             totalInstitute += parseFloat(cls.institute_income || 0);
 
                             html += `
                                 <tr>
-                                    <td><small>${cls.class_name || 'N/A'}</small></td>
-                                    <td class="text-end"><small>${cls.percentage || '0'}%</small></td>
+                                    <td><small>${escapeHtml(cls.class_name || 'N/A')}</small></td>
+                                    <td class="text-end"><small>${cls.teacher_percentage || 0}%</small></td>
+                                    <td class="text-end"><small>${cls.organizer_percentage || 10}%</small></td>
                                     <td class="text-end"><small>${formatCurrency(cls.total_amount)}</small></td>
                                     <td class="text-end text-success"><small>${formatCurrency(cls.teacher_earning)}</small></td>
+                                    <td class="text-end text-danger"><small>${formatCurrency(cls.organizer_income)}</small></td>
                                     <td class="text-end text-primary"><small>${formatCurrency(cls.institute_income)}</small></td>
                                 </tr>
                             `;
@@ -1387,8 +1440,10 @@
                                     <tr>
                                         <th><small>Total</small></th>
                                         <th class="text-end"><small></small></th>
+                                        <th class="text-end"><small></small></th>
                                         <th class="text-end"><small>${formatCurrency(totalAmount)}</small></th>
                                         <th class="text-end"><small>${formatCurrency(totalTeacher)}</small></th>
+                                        <th class="text-end"><small>${formatCurrency(totalOrganizer)}</small></th>
                                         <th class="text-end"><small>${formatCurrency(totalInstitute)}</small></th>
                                     </tr>
                                 </tfoot>
@@ -1417,6 +1472,13 @@
                 });
             }
 
+            function escapeHtml(text) {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
             function showNotification(message, type = 'info') {
                 if (typeof toastr !== 'undefined') {
                     toastr[type](message);
@@ -1429,7 +1491,7 @@
                         <div class="alert alert-${alertClass} alert-dismissible fade show position-fixed" 
                              style="top: 20px; right: 20px; z-index: 9999; max-width: 300px;">
                             <i class="fas fa-${icon} me-2"></i>
-                            <small>${message}</small>
+                            <small>${escapeHtml(message)}</small>
                             <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
                         </div>
                     `);

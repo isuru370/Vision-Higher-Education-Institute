@@ -97,7 +97,6 @@ class EmailsController extends Controller
     public function downloadPaymentReport($teacherId, $yearMonth)
     {
         try {
-            // Validate YYYY-MM
             if (!preg_match('/^\d{4}-\d{2}$/', $yearMonth)) {
                 return response()->json([
                     'success' => false,
@@ -105,49 +104,65 @@ class EmailsController extends Controller
                 ], 400);
             }
 
-            // Get flat payment data - this now returns an array, not JsonResponse
-            $paymentData = $this->teacherPaymentsService
-                ->studentPaymentMonthFlat($teacherId, $yearMonth);
+            $paymentData = $this->teacherPaymentsService->studentPaymentMonthFlat($teacherId, $yearMonth);
 
-            // Check if successful
-            if (!$paymentData['success']) {
+            if (!($paymentData['success'] ?? false)) {
                 return response()->json([
                     'success' => false,
                     'message' => $paymentData['message'] ?? 'Failed to get payment data'
                 ], 400);
             }
 
-            /* ---------- CALCULATE TOTALS ---------- */
             $students = $paymentData['students'] ?? [];
-            $totalAmount = collect($students)->sum('amount');
-            $totalStudents = collect($students)->pluck('student_id')->unique()->count();
+            $classes = $paymentData['classes'] ?? [];
+            $totals = $paymentData['totals'] ?? [];
 
-            /* ---------- FORMAT MONTH ---------- */
+            $totalAmount = round((float) ($totals['total_paid_amount'] ?? 0), 2);
+            $totalTeacherCut = round((float) ($totals['total_teacher_cut'] ?? 0), 2);
+            $totalOrganizeCut = round((float) ($totals['total_organize_cut'] ?? 0), 2);
+            $totalInstituteCut = round((float) ($totals['total_institute_cut'] ?? 0), 2);
+
+            $totalStudents = collect($students)
+                ->pluck('student_id')
+                ->filter()
+                ->unique()
+                ->count();
+
             $formattedMonth = date('F Y', strtotime($yearMonth . '-01'));
             $fileNameMonth = date('F-Y', strtotime($yearMonth . '-01'));
 
-            /* ---------- PDF DATA ---------- */
+            $teacherName = $paymentData['teacher']['name'] ?? 'teacher';
+            $cleanTeacherName = preg_replace('/[^A-Za-z0-9]/', '_', $teacherName);
+            $cleanTeacherName = preg_replace('/_+/', '_', $cleanTeacherName);
+            $cleanTeacherName = trim($cleanTeacherName, '_');
+
+            if (empty($cleanTeacherName)) {
+                $cleanTeacherName = 'teacher';
+            }
+
             $pdfViewData = [
                 'students' => $students,
-                'teacher' => $paymentData['teacher'],
+                'teacher' => $paymentData['teacher'] ?? [],
                 'yearMonth' => $yearMonth,
                 'month' => $formattedMonth,
                 'totalAmount' => $totalAmount,
                 'totalStudents' => $totalStudents,
-                'classData' => $paymentData['classes'] ?? [] // Add class data for PDF
+                'totalTeacherCut' => $totalTeacherCut,
+                'totalOrganizeCut' => $totalOrganizeCut,
+                'totalInstituteCut' => $totalInstituteCut,
+                'classData' => $classes,
             ];
 
-            // Generate PDF
             $pdf = Pdf::loadView('emails.payment_report', $pdfViewData)
                 ->setPaper('A4', 'portrait');
 
-            $fileName = "payment-report-{$teacherId}-{$fileNameMonth}.pdf";
+            $fileName = "payment_report_{$cleanTeacherName}_{$fileNameMonth}.pdf";
 
-            // Download PDF
             return $pdf->download($fileName);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
+                'message' => 'Failed to download payment report.',
                 'error' => $e->getMessage()
             ], 500);
         }

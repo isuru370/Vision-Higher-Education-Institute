@@ -20,8 +20,8 @@ class TeacherLedgerSummaryService
     {
         try {
             $date  = Carbon::createFromFormat('Y-m', $yearMonth);
-            $start = $date->copy()->startOfMonth();
-            $end   = $date->copy()->endOfMonth();
+            $start = $date->copy()->startOfMonth()->startOfDay();
+            $end   = $date->copy()->endOfMonth()->endOfDay();
 
             // පෙර මාසයේ closing balance
             $openingBalance = $this->getOpeningBalance($yearMonth);
@@ -73,8 +73,8 @@ class TeacherLedgerSummaryService
             $requestedMonth = Carbon::createFromFormat('Y-m', $yearMonth)->startOfMonth();
             $previousMonth = $requestedMonth->copy()->subMonth();
 
-            $monthStart = $previousMonth->copy()->startOfMonth();
-            $monthEnd   = $previousMonth->copy()->endOfMonth();
+            $monthStart = $previousMonth->copy()->startOfMonth()->startOfDay();
+            $monthEnd   = $previousMonth->copy()->endOfMonth()->endOfDay();
 
             // optional limit: before 2026-01 return 0
             if ($monthStart->lt(Carbon::create(2026, 1, 1)->startOfMonth())) {
@@ -93,8 +93,6 @@ class TeacherLedgerSummaryService
                     ->get();
 
                 foreach ($classes as $class) {
-                    $percentage = (float) ($class->teacher_percentage ?? 0);
-
                     $classEarnings = Payments::where('status', 1)
                         ->whereBetween('payment_date', [$monthStart, $monthEnd])
                         ->whereHas('studentStudentClass.studentClass', function ($q) use ($class) {
@@ -103,8 +101,12 @@ class TeacherLedgerSummaryService
                         })
                         ->sum('amount');
 
-                    $teacherShare = ($classEarnings * $percentage) / 100;
-                    $teacherTotalShare += $teacherShare;
+                    $breakdown = $this->calculatePaymentBreakdown(
+                        (float) $classEarnings,
+                        (float) ($class->teacher_percentage ?? 0)
+                    );
+
+                    $teacherTotalShare += $breakdown['teacher_share'];
                 }
 
                 $teacherPaid = TeacherPayment::where('status', 1)
@@ -112,7 +114,7 @@ class TeacherLedgerSummaryService
                     ->where('teacher_id', $teacher->id)
                     ->sum('payment');
 
-                $teacherNet = $teacherTotalShare - $teacherPaid;
+                $teacherNet = $teacherTotalShare - (float) $teacherPaid;
 
                 $totalBalance += $teacherNet;
             }
@@ -123,9 +125,8 @@ class TeacherLedgerSummaryService
         }
     }
 
-
     /**
-     * Teacher payment ledger entries
+     * Teacher income ledger entries
      */
     private function teacherIncomeEntries(Carbon $start, Carbon $end): Collection
     {
@@ -148,8 +149,8 @@ class TeacherLedgerSummaryService
         $groupedPayments = [];
 
         foreach ($payments as $p) {
-            $class = $p->studentStudentClass->studentClass;
-            $teacher = $class->teacher;
+            $class = optional($p->studentStudentClass)->studentClass;
+            $teacher = optional($class)->teacher;
 
             if (!$teacher || !$class) {
                 continue;
@@ -163,13 +164,17 @@ class TeacherLedgerSummaryService
                     'date' => Carbon::parse($p->payment_date)->startOfDay(),
                     'teacher' => $teacher,
                     'class' => $class,
-                    'total_amount' => 0
+                    'total_amount' => 0.0
                 ];
             }
 
-            // Calculate teacher's share for this payment USING CLASS PERCENTAGE
-            $teacherShare = ($p->amount * $class->teacher_percentage) / 100;
-            $groupedPayments[$key]['total_amount'] += $teacherShare;
+            $breakdown = $this->calculatePaymentBreakdown(
+                (float) $p->amount,
+                (float) ($class->teacher_percentage ?? 0)
+            );
+
+            // Ledger එකට එන්නේ teacher share විතරයි
+            $groupedPayments[$key]['total_amount'] += $breakdown['teacher_share'];
         }
 
         // Create entries
@@ -198,14 +203,22 @@ class TeacherLedgerSummaryService
             ->whereBetween('date', [$start, $end])
             ->orderBy('date')
             ->get()
-            ->map(fn($t) => [
-                'date' => Carbon::parse($t->date)->startOfDay(),
-                'description' => $t->reason_code
-                    ? $t->reason_code . ' - ' . trim($t->teacher->fname . ' ' . $t->teacher->lname)
-                    : trim($t->teacher->fname . ' ' . $t->teacher->lname),
-                'receipt' => 0.0,
-                'payment' => (float)$t->payment
-            ]);
+            ->map(function ($t) {
+                $teacherName = trim(
+                    ($t->teacher->fname ?? '') . ' ' . ($t->teacher->lname ?? '')
+                );
+
+                $description = $t->reason_code
+                    ? $t->reason_code . ' - ' . $teacherName
+                    : $teacherName;
+
+                return [
+                    'date' => Carbon::parse($t->date)->startOfDay(),
+                    'description' => $description,
+                    'receipt' => 0.0,
+                    'payment' => (float) $t->payment
+                ];
+            });
     }
 
     /**
@@ -216,12 +229,13 @@ class TeacherLedgerSummaryService
         $balance = $openingBalance;
 
         return $entries->map(function ($e) use (&$balance) {
-            $balance += $e['receipt'] - $e['payment'];
+            $balance += ((float) $e['receipt']) - ((float) $e['payment']);
+
             return [
                 'date' => Carbon::parse($e['date'])->format('d M Y'),
                 'description' => $e['description'],
-                'receipt' => $e['receipt'] > 0 ? number_format($e['receipt'], 2) : '',
-                'payment' => $e['payment'] > 0 ? number_format($e['payment'], 2) : '',
+                'receipt' => $e['receipt'] > 0 ? number_format((float) $e['receipt'], 2) : '',
+                'payment' => $e['payment'] > 0 ? number_format((float) $e['payment'], 2) : '',
                 'balance' => number_format($balance, 2)
             ];
         });
@@ -240,6 +254,36 @@ class TeacherLedgerSummaryService
             'total_payments' => round($payments, 2),
             'net_change' => round($receipts - $payments, 2),
             'closing_balance' => $ledger->last()['balance'] ?? '0.00'
+        ];
+    }
+
+    /**
+     * Payment breakdown:
+     * Teacher % + Organizer 10% + Institute remainder
+     */
+    private function calculatePaymentBreakdown(float $amount, float $teacherPercentage): array
+    {
+        $organizerPercentage = 10.0;
+
+        $teacherPercentage = max(0, $teacherPercentage);
+
+        // Invalid setup avoid කරන්න
+        if (($teacherPercentage + $organizerPercentage) > 100) {
+            return [
+                'teacher_share' => 0.0,
+                'organizer_share' => 0.0,
+                'institute_share' => 0.0,
+            ];
+        }
+
+        $teacherShare = round(($amount * $teacherPercentage) / 100, 2);
+        $organizerShare = round(($amount * $organizerPercentage) / 100, 2);
+        $instituteShare = round($amount - ($teacherShare + $organizerShare), 2);
+
+        return [
+            'teacher_share' => $teacherShare,
+            'organizer_share' => $organizerShare,
+            'institute_share' => $instituteShare,
         ];
     }
 }
