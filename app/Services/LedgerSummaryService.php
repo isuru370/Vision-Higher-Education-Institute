@@ -20,8 +20,8 @@ class LedgerSummaryService
     {
         try {
             $date  = Carbon::createFromFormat('Y-m', $yearMonth);
-            $start = $date->copy()->startOfMonth();
-            $end   = $date->copy()->endOfMonth();
+            $start = $date->copy()->startOfMonth()->startOfDay();
+            $end   = $date->copy()->endOfMonth()->endOfDay();
 
             $openingBalance = $this->getOpeningBalance($yearMonth);
 
@@ -64,62 +64,60 @@ class LedgerSummaryService
     private function getOpeningBalance(string $yearMonth): float
     {
         try {
-            if (!preg_match('/^\d{4}-\d{2}$/', $yearMonth)) {
+            if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $yearMonth)) {
                 return 0.0;
             }
 
-            $startDate = Carbon::create(2026, 1, 1)->startOfDay();
-            $endDate   = Carbon::createFromFormat('Y-m', $yearMonth)->startOfMonth();
+            $requestedMonth = Carbon::createFromFormat('Y-m', $yearMonth)->startOfMonth();
+            $previousMonth = $requestedMonth->copy()->subMonth();
 
-            if ($endDate->lessThanOrEqualTo($startDate)) {
-                return 0.0;
-            }
+            $monthStart = $previousMonth->copy()->startOfMonth()->startOfDay();
+            $monthEnd   = $previousMonth->copy()->endOfMonth()->endOfDay();
 
-            $openingBalance = 0;
-            $period = $startDate->copy();
+            $openingBalance = 0.0;
 
-            while ($period->lt($endDate)) {
-                $monthStart = $period->copy()->startOfMonth();
-                $monthEnd   = $period->copy()->endOfMonth();
+            // ---------- CLASS PAYMENTS (Institute share only) ----------
+            $classPayments = Payments::with(['studentStudentClass.studentClass.teacher'])
+                ->where('status', 1)
+                ->whereBetween('payment_date', [$monthStart, $monthEnd])
+                ->get();
 
-                // ---------- CLASS PAYMENTS ----------
-                $classPayments = Payments::with(['studentStudentClass.studentClass.teacher'])
-                    ->where('status', 1)
-                    ->whereBetween('payment_date', [$monthStart, $monthEnd])
-                    ->get();
+            $totalInstituteReceipts = 0.0;
 
-                $totalInstituteReceipts = 0;
-                foreach ($classPayments as $payment) {
-                    $class = $payment->studentStudentClass->studentClass ?? null;
-                    $percentage = $class->teacher_percentage ?? 0;
-                    $teacher = $class->teacher ?? null;
+            foreach ($classPayments as $payment) {
+                $class = optional($payment->studentStudentClass)->studentClass;
+                $teacher = optional($class)->teacher;
+                $teacherPercentage = (float) ($class->teacher_percentage ?? 0);
 
-                    if ($class && $teacher && $teacher->is_active) {
-                        $teacherShare = round(($payment->amount * $percentage) / 100, 2);
-                        $instituteShare = round($payment->amount - $teacherShare, 2);
-                    } else {
-                        $instituteShare = $payment->amount;
-                    }
+                if ($class && $teacher && $teacher->is_active) {
+                    $breakdown = $this->calculatePaymentBreakdown(
+                        (float) $payment->amount,
+                        $teacherPercentage
+                    );
 
-                    $totalInstituteReceipts += $instituteShare;
+                    $instituteShare = $breakdown['institute_share'];
+                } else {
+                    // no active teacher/class → full amount institute share
+                    $instituteShare = (float) $payment->amount;
                 }
 
-                // Admission payments
-                $totalInstituteReceipts += (float) AdmissionPayments::whereBetween('created_at', [$monthStart, $monthEnd])->sum('amount');
-
-                // Extra incomes
-                $totalInstituteReceipts += (float) ExtraIncomes::whereBetween('created_at', [$monthStart, $monthEnd])->sum('amount');
-
-                // ---------- EXPENSES ----------
-                $totalExpenses = (float) InstitutePayment::where('status', 1)
-                    ->whereBetween('date', [$monthStart, $monthEnd])
-                    ->sum('payment');
-
-                // Update opening balance
-                $openingBalance += ($totalInstituteReceipts - $totalExpenses);
-
-                $period->addMonth();
+                $totalInstituteReceipts += $instituteShare;
             }
+
+            // ---------- ADMISSION PAYMENTS ----------
+            $totalInstituteReceipts += (float) AdmissionPayments::whereBetween('created_at', [$monthStart, $monthEnd])
+                ->sum('amount');
+
+            // ---------- EXTRA INCOMES ----------
+            $totalInstituteReceipts += (float) ExtraIncomes::whereBetween('created_at', [$monthStart, $monthEnd])
+                ->sum('amount');
+
+            // ---------- EXPENSES ----------
+            $totalExpenses = (float) InstitutePayment::where('status', 1)
+                ->whereBetween('date', [$monthStart, $monthEnd])
+                ->sum('payment');
+
+            $openingBalance += ($totalInstituteReceipts - $totalExpenses);
 
             return round($openingBalance, 2);
         } catch (Throwable $e) {
@@ -128,7 +126,7 @@ class LedgerSummaryService
     }
 
     /**
-     * Class income ledger entries (INSTITUTE SHARE ONLY - After teacher percentage deduction)
+     * Class income ledger entries (INSTITUTE SHARE ONLY)
      */
     private function classIncomeEntries(Carbon $start, Carbon $end): Collection
     {
@@ -142,19 +140,23 @@ class LedgerSummaryService
             ->groupBy(fn($payment) => Carbon::parse($payment->payment_date)->format('Y-m-d'));
 
         foreach ($paymentsByDate as $date => $payments) {
-            $totalForDay = 0;
+            $totalForDay = 0.0;
             $paymentCount = $payments->count();
 
             foreach ($payments as $payment) {
-                $class = $payment->studentStudentClass->studentClass ?? null;
-                $percentage = $class->teacher_percentage ?? 0;
-                $teacher = $class->teacher ?? null;
+                $class = optional($payment->studentStudentClass)->studentClass;
+                $teacher = optional($class)->teacher;
+                $teacherPercentage = (float) ($class->teacher_percentage ?? 0);
 
                 if ($class && $teacher && $teacher->is_active) {
-                    $teacherShare = round(($payment->amount * $percentage) / 100, 2);
-                    $instituteShare = round($payment->amount - $teacherShare, 2);
+                    $breakdown = $this->calculatePaymentBreakdown(
+                        (float) $payment->amount,
+                        $teacherPercentage
+                    );
+
+                    $instituteShare = $breakdown['institute_share'];
                 } else {
-                    $instituteShare = $payment->amount;
+                    $instituteShare = (float) $payment->amount;
                 }
 
                 $totalForDay += $instituteShare;
@@ -187,7 +189,7 @@ class LedgerSummaryService
             ->map(fn($p) => [
                 'date' => Carbon::parse($p->day)->startOfDay(),
                 'description' => 'Admission Fee',
-                'receipt' => (float)$p->total,
+                'receipt' => (float) $p->total,
                 'payment' => 0.0
             ]);
     }
@@ -203,7 +205,7 @@ class LedgerSummaryService
             ->map(fn($e) => [
                 'date' => Carbon::parse($e->created_at)->startOfDay(),
                 'description' => $e->reason ?: 'Extra Income',
-                'receipt' => (float)$e->amount,
+                'receipt' => (float) $e->amount,
                 'payment' => 0.0
             ]);
     }
@@ -221,7 +223,7 @@ class LedgerSummaryService
                 'date' => Carbon::parse($e->date)->startOfDay(),
                 'description' => $e->reason ?: 'Institute Expense',
                 'receipt' => 0.0,
-                'payment' => (float)$e->payment
+                'payment' => (float) $e->payment
             ]);
     }
 
@@ -233,12 +235,13 @@ class LedgerSummaryService
         $balance = $openingBalance;
 
         return $entries->map(function ($e) use (&$balance) {
-            $balance += $e['receipt'] - $e['payment'];
+            $balance += ((float) $e['receipt']) - ((float) $e['payment']);
+
             return [
                 'date' => Carbon::parse($e['date'])->format('d M Y'),
                 'description' => $e['description'],
-                'receipt' => $e['receipt'] > 0 ? number_format($e['receipt'], 2) : '',
-                'payment' => $e['payment'] > 0 ? number_format($e['payment'], 2) : '',
+                'receipt' => $e['receipt'] > 0 ? number_format((float) $e['receipt'], 2) : '',
+                'payment' => $e['payment'] > 0 ? number_format((float) $e['payment'], 2) : '',
                 'balance' => number_format($balance, 2)
             ];
         });
@@ -257,6 +260,37 @@ class LedgerSummaryService
             'total_payments' => round($payments, 2),
             'net_change' => round($receipts - $payments, 2),
             'closing_balance' => $ledger->last()['balance'] ?? '0.00'
+        ];
+    }
+
+    /**
+     * Payment breakdown:
+     * Teacher % + Organizer 10% + Institute remainder
+     */
+    private function calculatePaymentBreakdown(float $amount, float $teacherPercentage): array
+    {
+        $organizerPercentage = 10.0;
+
+        $amount = max(0, $amount);
+        $teacherPercentage = max(0, $teacherPercentage);
+
+        // invalid percentage setup
+        if (($teacherPercentage + $organizerPercentage) > 100) {
+            return [
+                'teacher_share' => 0.0,
+                'organizer_share' => 0.0,
+                'institute_share' => 0.0,
+            ];
+        }
+
+        $teacherShare = round(($amount * $teacherPercentage) / 100, 2);
+        $organizerShare = round(($amount * $organizerPercentage) / 100, 2);
+        $instituteShare = round($amount - ($teacherShare + $organizerShare), 2);
+
+        return [
+            'teacher_share' => $teacherShare,
+            'organizer_share' => $organizerShare,
+            'institute_share' => $instituteShare,
         ];
     }
 }

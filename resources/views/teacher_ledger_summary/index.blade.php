@@ -21,7 +21,7 @@
                             <h5 class="mb-1 text-primary">
                                 <i class="fas fa-book me-2"></i>Monthly Ledger Summary
                             </h5>
-                            <p class="text-muted small mb-0">Generate detailed ledger for selected month</p>
+                            <p class="text-muted small mb-0">Teacher ledger for selected month</p>
                         </div>
                         <div class="col-md-4">
                             <form id="ledgerForm" method="GET" action="{{ route('teacher_ledger_summary.index') }}">
@@ -57,7 +57,7 @@
                     <div class="card-body p-3">
                         <div class="row g-0 align-items-center">
                             <div class="col-8">
-                                <div class="text-xs fw-bold text-muted text-uppercase">Opening</div>
+                                <div class="text-xs fw-bold text-muted text-uppercase">Opening Balance</div>
                                 <div class="h6 mb-0 fw-bold">
                                     Rs. {{ number_format($ledgerData['opening_balance'], 2) }}
                                 </div>
@@ -75,7 +75,7 @@
                     <div class="card-body p-3">
                         <div class="row g-0 align-items-center">
                             <div class="col-8">
-                                <div class="text-xs fw-bold text-muted text-uppercase">Receipts</div>
+                                <div class="text-xs fw-bold text-muted text-uppercase">Total Receipts</div>
                                 <div class="h6 mb-0 fw-bold text-success">
                                     Rs. {{ number_format($ledgerData['summary']['total_receipts'], 2) }}
                                 </div>
@@ -93,7 +93,7 @@
                     <div class="card-body p-3">
                         <div class="row g-0 align-items-center">
                             <div class="col-8">
-                                <div class="text-xs fw-bold text-muted text-uppercase">Payments</div>
+                                <div class="text-xs fw-bold text-muted text-uppercase">Total Payments</div>
                                 <div class="h6 mb-0 fw-bold text-danger">
                                     Rs. {{ number_format($ledgerData['summary']['total_payments'], 2) }}
                                 </div>
@@ -111,7 +111,7 @@
                     <div class="card-body p-3">
                         <div class="row g-0 align-items-center">
                             <div class="col-8">
-                                <div class="text-xs fw-bold text-muted text-uppercase">Closing</div>
+                                <div class="text-xs fw-bold text-muted text-uppercase">Closing Balance</div>
                                 <div class="h6 mb-0 fw-bold text-warning">
                                     Rs. {{ $ledgerData['summary']['closing_balance'] }}
                                 </div>
@@ -137,9 +137,6 @@
                                 {{ $ledgerData['period']['start_date'] }} - {{ $ledgerData['period']['end_date'] }}
                             </span>
                         </div>
-                        <div>
-                            <span class="badge bg-primary">Monthly Ledger</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -150,41 +147,9 @@
             <div class="col-12">
                 <div class="card shadow-sm border-0">
                     <div class="card-header bg-white py-2 border-bottom">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">
-                                <i class="fas fa-table me-2 text-primary"></i>Ledger Details
-                            </h6>
-                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" 
-                                    data-bs-target="#filterSection" aria-expanded="false">
-                                <i class="fas fa-filter"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Filter Section -->
-                    <div class="collapse" id="filterSection">
-                        <div class="card-body border-bottom bg-light py-2">
-                            <div class="row g-2">
-                                <div class="col-md-4">
-                                    <label class="form-label small text-muted mb-1">Transaction Type</label>
-                                    <select class="form-select form-select-sm" id="filterType">
-                                        <option value="all">All</option>
-                                        <option value="receipt">Receipts</option>
-                                        <option value="payment">Payments</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="form-label small text-muted mb-1">Search</label>
-                                    <div class="input-group input-group-sm">
-                                        <input type="text" class="form-control" 
-                                               placeholder="Search description..." id="searchDescription">
-                                        <button class="btn btn-outline-secondary" onclick="clearFilters()">
-                                            <i class="fas fa-times"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <h6 class="mb-0">
+                            <i class="fas fa-table me-2 text-primary"></i>Ledger Details
+                        </h6>
                     </div>
 
                     <div class="card-body p-0">
@@ -195,17 +160,17 @@
                                         <th class="ps-3" style="width: 15%">
                                             <i class="far fa-calendar me-1"></i>Date
                                         </th>
-                                        <th style="width: 45%">
+                                        <th style="width: 50%">
                                             <i class="far fa-file-alt me-1"></i>Description
                                         </th>
-                                        <th class="text-end" style="width: 10%">
-                                            <i class="fas fa-plus-circle me-1 text-success"></i>Receipt
+                                        <th class="text-end" style="width: 15%">
+                                            <i class="fas fa-plus-circle me-1 text-success"></i>Receipt (Rs.)
                                         </th>
-                                        <th class="text-end" style="width: 10%">
-                                            <i class="fas fa-minus-circle me-1 text-danger"></i>Payment
+                                        <th class="text-end" style="width: 15%">
+                                            <i class="fas fa-minus-circle me-1 text-danger"></i>Payment (Rs.)
                                         </th>
                                         <th class="text-end pe-3" style="width: 15%">
-                                            <i class="fas fa-balance-scale me-1"></i>Balance
+                                            <i class="fas fa-balance-scale me-1"></i>Balance (Rs.)
                                         </th>
                                     </tr>
                                 </thead>
@@ -236,8 +201,8 @@
                                             </td>
                                             <td class="text-end">
                                                 @if($entry['receipt'])
-                                                    <span class="text-success">
-                                                        {{ $entry['receipt'] }}
+                                                    <span class="text-success fw-medium">
+                                                        {{ number_format((float)str_replace(',', '', $entry['receipt']), 2) }}
                                                     </span>
                                                 @else
                                                     <span class="text-muted">-</span>
@@ -245,22 +210,22 @@
                                             </td>
                                             <td class="text-end">
                                                 @if($entry['payment'])
-                                                    <span class="text-danger">
-                                                        {{ $entry['payment'] }}
+                                                    <span class="text-danger fw-medium">
+                                                        {{ number_format((float)str_replace(',', '', $entry['payment']), 2) }}
                                                     </span>
                                                 @else
                                                     <span class="text-muted">-</span>
                                                 @endif
                                             </td>
                                             <td class="text-end pe-3 fw-medium">
-                                                {{ $entry['balance'] }}
+                                                {{ number_format((float)str_replace(',', '', $entry['balance']), 2) }}
                                             </td>
                                         </tr>
                                     @empty
                                         <tr>
                                             <td colspan="5" class="text-center py-4">
                                                 <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
-                                                <p class="text-muted mb-0">No transactions found</p>
+                                                <p class="text-muted mb-0">No transactions found for this month</p>
                                             </td>
                                         </tr>
                                     @endforelse
@@ -277,7 +242,7 @@
                                             {{ number_format($ledgerData['summary']['total_payments'], 2) }}
                                         </td>
                                         <td class="text-end pe-3">
-                                            {{ $ledgerData['summary']['closing_balance'] }}
+                                            {{ number_format((float)str_replace(',', '', $ledgerData['summary']['closing_balance']), 2) }}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -285,18 +250,9 @@
                         </div>
                     </div>
                     
-                    <div class="card-footer bg-white py-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div class="text-muted small">
-                                <i class="fas fa-clock me-1"></i>
-                                {{ date('Y-m-d H:i') }}
-                            </div>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="window.print()">
-                                    <i class="fas fa-print me-1"></i>Print
-                                </button>
-                            </div>
-                        </div>
+                    <div class="card-footer bg-white py-2 text-muted small">
+                        <i class="fas fa-clock me-1"></i>
+                        Generated on {{ date('Y-m-d H:i:s') }}
                     </div>
                 </div>
             </div>
@@ -308,26 +264,26 @@
                 <div class="card shadow-sm border-0">
                     <div class="card-body p-3">
                         <div class="row text-center">
-                            <div class="col-md-2 col-4 mb-2">
+                            <div class="col-md-3 col-6 mb-2">
                                 <div class="p-2 border rounded">
                                     <div class="h5 mb-1">{{ count($ledgerData['ledger']) }}</div>
-                                    <small class="text-muted">Transactions</small>
+                                    <small class="text-muted">Total Transactions</small>
                                 </div>
                             </div>
-                            <div class="col-md-2 col-4 mb-2">
+                            <div class="col-md-3 col-6 mb-2">
                                 <div class="p-2 border rounded">
                                     <div class="h5 mb-1 text-success">
                                         {{ $ledgerData['ledger']->where('receipt', '!=', '')->count() }}
                                     </div>
-                                    <small class="text-muted">Receipts</small>
+                                    <small class="text-muted">Receipt Entries</small>
                                 </div>
                             </div>
-                            <div class="col-md-2 col-4 mb-2">
+                            <div class="col-md-3 col-6 mb-2">
                                 <div class="p-2 border rounded">
                                     <div class="h5 mb-1 text-danger">
                                         {{ $ledgerData['ledger']->where('payment', '!=', '')->count() }}
                                     </div>
-                                    <small class="text-muted">Payments</small>
+                                    <small class="text-muted">Payment Entries</small>
                                 </div>
                             </div>
                             <div class="col-md-3 col-6 mb-2">
@@ -342,16 +298,6 @@
                                         </span>
                                     </div>
                                     <small class="text-muted">Net Change</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6 mb-2">
-                                <div class="p-2 border rounded">
-                                    <div class="h5 mb-1">
-                                        <span class="badge {{ $ledgerData['summary']['net_change'] >= 0 ? 'bg-success' : 'bg-danger' }}">
-                                            {{ $ledgerData['summary']['net_change'] >= 0 ? 'Profit' : 'Loss' }}
-                                        </span>
-                                    </div>
-                                    <small class="text-muted">Status</small>
                                 </div>
                             </div>
                         </div>
@@ -371,7 +317,7 @@
                     </div>
                     <div class="card-body">
                         <div class="row align-items-center">
-                            <div class="col-md-4">
+                            <div class="col-md-5">
                                 <div class="text-center mb-3">
                                     <h4 class="text-success mb-1">
                                         Rs. {{ number_format($ledgerData['summary']['total_receipts'], 2) }}
@@ -384,8 +330,14 @@
                                     </h4>
                                     <small class="text-muted">Total Payments</small>
                                 </div>
+                                <div class="text-center">
+                                    <h4 class="text-primary mb-1">
+                                        Rs. {{ number_format(abs($netChange), 2) }}
+                                    </h4>
+                                    <small class="text-muted">Net {{ $netChange >= 0 ? 'Income' : 'Loss' }}</small>
+                                </div>
                             </div>
-                            <div class="col-md-8">
+                            <div class="col-md-7">
                                 <canvas id="ledgerChart" height="200"></canvas>
                             </div>
                         </div>
@@ -413,48 +365,19 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Auto submit form on month change
-            document.getElementById('monthSelect').addEventListener('change', function() {
-                if(this.value) {
-                    document.getElementById('ledgerForm').submit();
-                }
-            });
-            
-            // Filter functionality
-            document.getElementById('filterType').addEventListener('change', filterTable);
-            document.getElementById('searchDescription').addEventListener('keyup', filterTable);
+            const monthSelect = document.getElementById('monthSelect');
+            if (monthSelect) {
+                monthSelect.addEventListener('change', function() {
+                    if(this.value) {
+                        document.getElementById('ledgerForm').submit();
+                    }
+                });
+            }
             
             @if(isset($data) && $data['status'] === 'success')
                 initializeChart();
             @endif
         });
-        
-        function filterTable() {
-            const typeFilter = document.getElementById('filterType').value;
-            const searchFilter = document.getElementById('searchDescription').value.toLowerCase();
-            const rows = document.querySelectorAll('.ledger-entry');
-            
-            rows.forEach(row => {
-                const receipt = row.querySelector('.text-success') !== null;
-                const description = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
-                
-                let showRow = true;
-                
-                // Apply type filter
-                if (typeFilter === 'receipt' && !receipt) showRow = false;
-                if (typeFilter === 'payment' && receipt) showRow = false;
-                
-                // Apply search filter
-                if (searchFilter && !description.includes(searchFilter)) showRow = false;
-                
-                row.style.display = showRow ? '' : 'none';
-            });
-        }
-        
-        function clearFilters() {
-            document.getElementById('filterType').value = 'all';
-            document.getElementById('searchDescription').value = '';
-            filterTable();
-        }
         
         function initializeChart() {
             const ctx = document.getElementById('ledgerChart').getContext('2d');
@@ -481,10 +404,26 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: true,
                     plugins: {
                         legend: {
-                            position: 'bottom'
+                            position: 'bottom',
+                            labels: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    let value = context.raw || 0;
+                                    let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    let percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${label}: Rs. ${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
                         }
                     }
                 }
@@ -496,15 +435,32 @@
 @section('styles')
 <style>
     .card {
-        border-radius: 8px;
+        border-radius: 10px;
     }
     
     .border-start-2 {
-        border-left-width: 3px !important;
+        border-left-width: 4px !important;
+    }
+    
+    .border-start-primary {
+        border-left-color: #0d6efd !important;
+    }
+    
+    .border-start-success {
+        border-left-color: #198754 !important;
+    }
+    
+    .border-start-danger {
+        border-left-color: #dc3545 !important;
+    }
+    
+    .border-start-warning {
+        border-left-color: #ffc107 !important;
     }
     
     .table-sm td, .table-sm th {
-        padding: 0.5rem;
+        padding: 0.6rem;
+        vertical-align: middle;
     }
     
     .table > :not(:first-child) {
@@ -520,36 +476,34 @@
     }
     
     .small {
-        font-size: 0.875rem;
+        font-size: 0.85rem;
     }
     
     .h6 {
-        font-size: 1rem;
+        font-size: 0.95rem;
+        font-weight: 600;
     }
     
-    .form-select-sm, .form-control-sm {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
+    .text-xs {
+        font-size: 0.7rem;
     }
     
-    .input-group-sm > .form-control,
-    .input-group-sm > .input-group-text {
-        padding: 0.25rem 0.5rem;
+    .bg-opacity-10 {
+        --bs-bg-opacity: 0.1;
     }
     
-    @media print {
-        .card-header, .card-footer, .btn, .alert {
-            display: none !important;
-        }
-        
-        .card {
-            border: none !important;
-            box-shadow: none !important;
-        }
-        
-        table {
-            font-size: 12px !important;
-        }
+    .alert-primary.bg-opacity-10 {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    
+    /* Hover effect for table rows */
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+    
+    /* Card shadow improvement */
+    .shadow-sm {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
     }
 </style>
 @endsection
