@@ -68,8 +68,8 @@ class StudentStudentStudentClassController extends Controller
         return $this->studentStudentStudentClassService->storeSingleStudentClass($request);
     }
 
-        public function updateStudentClass(Request $request,$id)
+    public function updateStudentClass(Request $request, $id)
     {
-        return $this->studentStudentStudentClassService->updateStudentClass($request, $id);
+        return $this->studentStudentStudentClassService->updateSingleStudentClass($request, $id);
     }
 }

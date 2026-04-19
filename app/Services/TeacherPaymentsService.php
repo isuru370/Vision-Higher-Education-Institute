@@ -1654,14 +1654,18 @@ class TeacherPaymentsService
         }
     }
 
+    /*
+|--------------------------------------------------------------------------
+| Detect category from class name
+|--------------------------------------------------------------------------
+*/
 
-    public function fetchTeacherPaymentsDaily()
+    public function fetchTeachersPaymentsDaily(Request $request)
     {
         try {
-            $now = Carbon::now();
-            $startOfMonth = $now->copy()->startOfMonth();
-            $endOfMonth = $now->copy()->endOfMonth();
-            $daysInMonth = $now->daysInMonth;
+            $selectedDay = $request->day
+                ? Carbon::parse($request->day)->startOfDay()
+                : Carbon::now()->startOfDay();
 
             $organizePercentage = 10;
 
@@ -1674,8 +1678,7 @@ class TeacherPaymentsService
                 return response()->json([
                     'status' => 'success',
                     'type' => 'daily',
-                    'year_month' => $now->format('Y-m'),
-                    'days_in_month' => $daysInMonth,
+                    'selected_date' => $selectedDay->toDateString(),
                     'data' => []
                 ]);
             }
@@ -1683,13 +1686,18 @@ class TeacherPaymentsService
             $teacherIds = $teachers->keys()->all();
 
             $payments = Payments::where('status', 1)
-                ->whereBetween('payment_date', [$startOfMonth, $endOfMonth])
+                ->whereDate('payment_date', $selectedDay->toDateString())
                 ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherIds) {
                     $q->whereIn('teacher_id', $teacherIds)
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage'
+                    'student:id,custom_id,initial_name,full_name',
+                    'studentStudentClass.studentClass.grade:id,grade_name',
+                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
+                    'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
+                    'studentStudentClass.classCategoryHasStudentClass:id,fees,class_category_id,student_classes_id',
+                    'studentStudentClass:id,student_id,student_classes_id,class_category_has_student_class_id,is_free_card,custom_fee,discount_percentage,discount_type',
                 ])
                 ->get();
 
@@ -1705,124 +1713,243 @@ class TeacherPaymentsService
                 $paymentsByTeacher[$class->teacher_id][] = $payment;
             }
 
-            $currentMonthYear = $now->format('m Y');
-
-            $advancePayments = TeacherPayment::selectRaw('teacher_id, SUM(payment) as advance_total')
-                ->whereIn('teacher_id', $teacherIds)
-                ->where('status', 1)
-                ->where('reason_code', '!=', 'salary')
-                ->where('payment_for', $currentMonthYear)
-                ->groupBy('teacher_id')
-                ->get()
-                ->keyBy('teacher_id');
-
             $dailyResult = [];
 
             foreach ($teachers as $teacher) {
                 $teacherPayments = $paymentsByTeacher[$teacher->id] ?? [];
 
-                $totalForMonth = 0.0;
-                $grossTeacherEarning = 0.0;
-                $totalOrganizeCut = 0.0;
-                $totalPaymentCount = 0;
+                $firstName = $teacher->fname ?? '';
+                $lastName = $teacher->lname ?? '';
+                $teacherInitial = $firstName ? strtoupper(substr($firstName, 0, 1)) . '.' : '';
+                $teacherDisplayName = trim($teacherInitial . ' ' . $lastName);
 
-                $categoryWise = [
-                    'Theory' => [
-                        'payment_count' => 0,
-                        'total_amount' => 0.0,
-                        'teacher_earning' => 0.0,
-                        'organize_percentage' => $organizePercentage,
-                        'organize_cut' => 0.0,
-                    ],
-                    'Revision' => [
-                        'payment_count' => 0,
-                        'total_amount' => 0.0,
-                        'teacher_earning' => 0.0,
-                        'organize_percentage' => $organizePercentage,
-                        'organize_cut' => 0.0,
-                    ],
-                    'Theory + Revision' => [
-                        'payment_count' => 0,
-                        'total_amount' => 0.0,
-                        'teacher_earning' => 0.0,
-                        'organize_percentage' => $organizePercentage,
-                        'organize_cut' => 0.0,
-                    ],
-                    'Other' => [
-                        'payment_count' => 0,
-                        'total_amount' => 0.0,
-                        'teacher_earning' => 0.0,
-                        'organize_percentage' => $organizePercentage,
-                        'organize_cut' => 0.0,
-                    ],
+                $summary = [
+                    'payment_count' => 0,
+                    'total_payment_amount' => 0.0,
+                    'gross_teacher_earning' => 0.0,
+                    'total_organize_cut' => 0.0,
+                    'institution_income' => 0.0,
+
+                    'free_card_count' => 0,
+                    'half_card_count' => 0,
+                    'custom_fee_count' => 0,
+                    'discounted_count' => 0,
+                    'default_fee_count' => 0,
                 ];
 
-                foreach ($teacherPayments as $payment) {
-                    $class = optional(optional($payment->studentStudentClass)->studentClass);
+                $classCategoryBreakdown = [];
+                $paymentDetails = [];
 
-                    if (!$class || !$class->id) {
+                foreach ($teacherPayments as $payment) {
+                    $ssc = $payment->studentStudentClass;
+                    if (!$ssc) {
                         continue;
                     }
 
-                    $amount = (float) $payment->amount;
-                    $teacherPercentage = (float) ($class->teacher_percentage ?? 0);
+                    $class = $ssc->studentClass;
+                    if (!$class) {
+                        continue;
+                    }
+
+                    $amount = round((float) $payment->amount, 2);
+                    $teacherPercentage = round((float) ($class->teacher_percentage ?? 0), 2);
 
                     $teacherCut = round(($amount * $teacherPercentage) / 100, 2);
                     $organizeCut = round(($amount * $organizePercentage) / 100, 2);
+                    $institutionCut = round($amount - ($teacherCut + $organizeCut), 2);
 
-                    $category = $this->detectClassCategory($class->class_name);
+                    $categoryLink = $ssc->classCategoryHasStudentClass;
 
-                    $totalForMonth += $amount;
-                    $grossTeacherEarning += $teacherCut;
-                    $totalOrganizeCut += $organizeCut;
-                    $totalPaymentCount++;
+                    $defaultFee = (float) ($categoryLink->fees ?? 0);
+                    $isFreeCard = (bool) ($ssc->is_free_card ?? false);
+                    $customFee = $ssc->custom_fee;
+                    $discountPercentage = $ssc->discount_percentage;
+                    $discountType = $ssc->discount_type;
 
-                    $categoryWise[$category]['payment_count'] += 1;
-                    $categoryWise[$category]['total_amount'] += $amount;
-                    $categoryWise[$category]['teacher_earning'] += $teacherCut;
-                    $categoryWise[$category]['organize_cut'] += $organizeCut;
+                    $effectiveFee = $defaultFee;
+                    $effectiveFeeRule = 'default_fee';
+
+                    if ($isFreeCard) {
+                        $effectiveFee = 0;
+                        $effectiveFeeRule = 'free_card';
+                        $summary['free_card_count']++;
+                    } elseif (!is_null($customFee)) {
+                        $effectiveFee = (float) $customFee;
+                        $effectiveFeeRule = 'custom_fee';
+                        $summary['custom_fee_count']++;
+                    } elseif (!is_null($discountPercentage)) {
+                        $effectiveFee = round(
+                            $defaultFee - (($defaultFee * (float) $discountPercentage) / 100),
+                            2
+                        );
+                        $effectiveFeeRule = 'discount_percentage';
+                        $summary['discounted_count']++;
+
+                        if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                            $summary['half_card_count']++;
+                        }
+                    } else {
+                        $summary['default_fee_count']++;
+                    }
+
+                    $summary['payment_count'] += 1;
+                    $summary['total_payment_amount'] += $amount;
+                    $summary['gross_teacher_earning'] += $teacherCut;
+                    $summary['total_organize_cut'] += $organizeCut;
+                    $summary['institution_income'] += $institutionCut;
+
+                    $classId = $class->id;
+                    $className = $class->class_name ?? '-';
+                    $gradeName = optional($class->grade)->grade_name ?? '-';
+
+                    $categoryName = optional(
+                        optional($ssc->classCategoryHasStudentClass)->classCategory
+                    )->category_name ?? 'Uncategorized';
+
+                    if (!isset($classCategoryBreakdown[$classId])) {
+                        $classCategoryBreakdown[$classId] = [
+                            'class_id' => $classId,
+                            'class_name' => $className,
+                            'grade_name' => $gradeName,
+                            'teacher_percentage' => $teacherPercentage,
+                            'organize_percentage' => $organizePercentage,
+                            'categories' => []
+                        ];
+                    }
+
+                    if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName])) {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName] = [
+                            'category_name' => $categoryName,
+                            'payment_count' => 0,
+                            'total_amount' => 0.0,
+                            'teacher_cut' => 0.0,
+                            'organize_cut' => 0.0,
+                            'institution_cut' => 0.0,
+
+                            'free_card_count' => 0,
+                            'half_card_count' => 0,
+                            'custom_fee_count' => 0,
+                            'discounted_count' => 0,
+                            'default_fee_count' => 0,
+
+                            'groups' => [],
+                        ];
+                    }
+
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['payment_count'] += 1;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['total_amount'] += $amount;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['teacher_cut'] += $teacherCut;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['organize_cut'] += $organizeCut;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['institution_cut'] += $institutionCut;
+
+                    if ($effectiveFeeRule === 'free_card') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['free_card_count']++;
+                    } elseif ($effectiveFeeRule === 'custom_fee') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['custom_fee_count']++;
+                    } elseif ($effectiveFeeRule === 'discount_percentage') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['discounted_count']++;
+
+                        if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                            $classCategoryBreakdown[$classId]['categories'][$categoryName]['half_card_count']++;
+                        }
+                    } else {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['default_fee_count']++;
+                    }
+
+                    $feeKey = $effectiveFeeRule . '_' . number_format((float) $effectiveFee, 2, '.', '');
+
+                    if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey])) {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey] = [
+                            'type' => $effectiveFeeRule,
+                            'fee' => round((float) $effectiveFee, 2),
+                            'count' => 0,
+                            'total' => 0.0,
+                        ];
+                    }
+
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['count'] += 1;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['total'] += $amount;
+
+                    $paymentDetails[] = [
+                        'payment_id' => $payment->id,
+                        'student_custom_id' => optional($payment->student)->custom_id,
+                        'student_name' => optional($payment->student)->initial_name
+                            ?? optional($payment->student)->full_name,
+                        'class_name' => $className,
+                        'grade_name' => $gradeName,
+                        'category_name' => $categoryName,
+                        'amount' => $amount,
+                        'default_fee' => round($defaultFee, 2),
+                        'effective_fee_reference' => round($effectiveFee, 2),
+                        'effective_fee_rule' => $effectiveFeeRule,
+                        'is_free_card' => $isFreeCard,
+                        'custom_fee' => !is_null($customFee) ? (float) $customFee : null,
+                        'discount_percentage' => !is_null($discountPercentage) ? (float) $discountPercentage : null,
+                        'discount_type' => $discountType,
+                        'teacher_percentage' => $teacherPercentage,
+                        'teacher_cut' => $teacherCut,
+                        'organize_cut' => $organizeCut,
+                        'institution_cut' => $institutionCut,
+                        'payment_date' => $payment->payment_date,
+                    ];
                 }
 
-                $advanceDeducted = (float) ($advancePayments[$teacher->id]->advance_total ?? 0);
+                $classCategoryBreakdown = array_map(function ($classItem) {
+                    $classItem['categories'] = array_map(function ($category) {
+                        $category['total_amount'] = round((float) $category['total_amount'], 2);
+                        $category['teacher_cut'] = round((float) $category['teacher_cut'], 2);
+                        $category['organize_cut'] = round((float) $category['organize_cut'], 2);
+                        $category['institution_cut'] = round((float) $category['institution_cut'], 2);
 
-                $totalForMonth = round($totalForMonth, 2);
-                $grossTeacherEarning = round($grossTeacherEarning, 2);
-                $totalOrganizeCut = round($totalOrganizeCut, 2);
-                $advanceDeducted = round($advanceDeducted, 2);
+                        $groups = array_values($category['groups']);
 
-                $institutionIncome = round($totalForMonth - ($grossTeacherEarning + $totalOrganizeCut), 2);
-                $netTeacherPayable = round(max($grossTeacherEarning - $advanceDeducted, 0), 2);
-                $dailySalary = round($netTeacherPayable / $daysInMonth, 2);
+                        foreach ($groups as &$group) {
+                            $group['fee'] = round((float) $group['fee'], 2);
+                            $group['total'] = round((float) $group['total'], 2);
+                            $group['line'] = strtoupper(str_replace('_', ' ', $group['type']))
+                                . ' : '
+                                . number_format($group['fee'], 2)
+                                . ' × '
+                                . $group['count']
+                                . ' = '
+                                . number_format($group['total'], 2);
+                        }
 
-                foreach ($categoryWise as $key => $value) {
-                    $categoryWise[$key]['total_amount'] = round($value['total_amount'], 2);
-                    $categoryWise[$key]['teacher_earning'] = round($value['teacher_earning'], 2);
-                    $categoryWise[$key]['organize_cut'] = round($value['organize_cut'], 2);
-                }
+                        $category['groups'] = $groups;
+                        $category['calculation_lines'] = array_map(function ($group) {
+                            return $group['line'];
+                        }, $groups);
+
+                        return $category;
+                    }, array_values($classItem['categories']));
+
+                    return $classItem;
+                }, array_values($classCategoryBreakdown));
+
+                $summary['total_payment_amount'] = round($summary['total_payment_amount'], 2);
+                $summary['gross_teacher_earning'] = round($summary['gross_teacher_earning'], 2);
+                $summary['total_organize_cut'] = round($summary['total_organize_cut'], 2);
+                $summary['institution_income'] = round($summary['institution_income'], 2);
+                $summary['advance_deducted_this_day'] = 0.00;
+                $summary['net_teacher_payable'] = round($summary['gross_teacher_earning'], 2);
+                $summary['daily_salary'] = round($summary['gross_teacher_earning'], 2);
 
                 $dailyResult[] = [
                     'teacher_id' => $teacher->id,
-                    'teacher_name' => trim(($teacher->fname ?? '') . ' ' . ($teacher->lname ?? '')),
-                    'payment_count' => $totalPaymentCount,
-                    'total_payment_amount' => $totalForMonth,
-                    'gross_teacher_earning' => $grossTeacherEarning,
-                    'total_organize_cut' => $totalOrganizeCut,
-                    'advance_deducted_this_month' => $advanceDeducted,
-                    'net_teacher_payable' => $netTeacherPayable,
-                    'daily_salary' => $dailySalary,
-                    'institution_income' => $institutionIncome,
-                    'category_wise_breakdown' => $categoryWise,
+                    'teacher_name' => $teacherDisplayName,
+                    'summary' => $summary,
+                    'class_category_breakdown' => $classCategoryBreakdown,
+                    'payment_details' => $paymentDetails,
                 ];
             }
 
             return response()->json([
                 'status' => 'success',
                 'type' => 'daily',
-                'year_month' => $now->format('Y-m'),
-                'days_in_month' => $daysInMonth,
+                'selected_date' => $selectedDay->toDateString(),
                 'data' => $dailyResult
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to calculate daily payments.',
@@ -1830,68 +1957,306 @@ class TeacherPaymentsService
             ], 500);
         }
     }
-    /*
-|--------------------------------------------------------------------------
-| Detect category from class name
-|--------------------------------------------------------------------------
-*/
-    private function detectClassCategory($className)
-    {
-        $name = strtolower(trim($className));
 
-        if (str_contains($name, 'theory + revision') || str_contains($name, 'theory and revision')) {
-            return 'Theory + Revision';
-        }
-
-        if (str_contains($name, 'revision')) {
-            return 'Revision';
-        }
-
-        if (str_contains($name, 'theory')) {
-            return 'Theory';
-        }
-
-        return 'Other';
-    }
-
-    public function fetchTeacherPaymentsWeekly()
+    public function fetchTeachersPaymentsWeekly(Request $request)
     {
         try {
-            $monthlyResponse = $this->fetchTeacherPaymentsCurrentMonth();
-            $monthlyData = $monthlyResponse->getData(true);
+            $fromDate = $request->from_date
+                ? Carbon::parse($request->from_date)->startOfDay()
+                : Carbon::now()->startOfWeek()->startOfDay();
 
-            if (($monthlyData['status'] ?? 'error') !== 'success') {
+            $toDate = $request->to_date
+                ? Carbon::parse($request->to_date)->endOfDay()
+                : Carbon::now()->endOfWeek()->endOfDay();
+
+            if ($fromDate->gt($toDate)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => $monthlyData['message'] ?? 'Failed to fetch current month teacher payments.'
-                ], $monthlyResponse->getStatusCode());
+                    'message' => 'From date cannot be greater than to date.'
+                ], 422);
             }
 
-            $now = Carbon::now();
-            $daysInMonth = $now->daysInMonth;
-            $yearMonth = $now->format('Y-m');
+            $organizePercentage = 10;
+
+            $teachers = Teacher::select('id', 'fname', 'lname')
+                ->where('is_active', 1)
+                ->get()
+                ->keyBy('id');
+
+            if ($teachers->isEmpty()) {
+                return response()->json([
+                    'status' => 'success',
+                    'type' => 'weekly',
+                    'from_date' => $fromDate->toDateString(),
+                    'to_date' => $toDate->toDateString(),
+                    'data' => []
+                ]);
+            }
+
+            $teacherIds = $teachers->keys()->all();
+
+            $payments = Payments::where('status', 1)
+                ->whereBetween('payment_date', [$fromDate, $toDate])
+                ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherIds) {
+                    $q->whereIn('teacher_id', $teacherIds)
+                        ->where('is_active', 1);
+                })
+                ->with([
+                    'student:id,custom_id,initial_name,full_name',
+                    'studentStudentClass.studentClass.grade:id,grade_name',
+                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
+                    'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
+                    'studentStudentClass.classCategoryHasStudentClass:id,fees,class_category_id,student_classes_id',
+                    'studentStudentClass:id,student_id,student_classes_id,class_category_has_student_class_id,is_free_card,custom_fee,discount_percentage,discount_type',
+                ])
+                ->get();
+
+            $paymentsByTeacher = [];
+
+            foreach ($payments as $payment) {
+                $class = optional(optional($payment->studentStudentClass)->studentClass);
+
+                if (!$class || !$class->teacher_id) {
+                    continue;
+                }
+
+                $paymentsByTeacher[$class->teacher_id][] = $payment;
+            }
 
             $weeklyResult = [];
 
-            foreach (($monthlyData['data'] ?? []) as $teacher) {
-                $netTeacherPayable = (float) ($teacher['net_teacher_payable'] ?? 0);
+            foreach ($teachers as $teacher) {
+                $teacherPayments = $paymentsByTeacher[$teacher->id] ?? [];
 
-                $dailySalary = round($netTeacherPayable / $daysInMonth, 2);
-                $weeklySalary = round($dailySalary * 7, 2);
+                $firstName = $teacher->fname ?? '';
+                $lastName = $teacher->lname ?? '';
+                $teacherInitial = $firstName ? strtoupper(substr($firstName, 0, 1)) . '.' : '';
+                $teacherDisplayName = trim($teacherInitial . ' ' . $lastName);
+
+                $summary = [
+                    'payment_count' => 0,
+                    'total_payment_amount' => 0.0,
+                    'gross_teacher_earning' => 0.0,
+                    'total_organize_cut' => 0.0,
+                    'institution_income' => 0.0,
+
+                    'free_card_count' => 0,
+                    'half_card_count' => 0,
+                    'custom_fee_count' => 0,
+                    'discounted_count' => 0,
+                    'default_fee_count' => 0,
+                ];
+
+                $classCategoryBreakdown = [];
+                $paymentDetails = [];
+
+                foreach ($teacherPayments as $payment) {
+                    $ssc = $payment->studentStudentClass;
+                    if (!$ssc) {
+                        continue;
+                    }
+
+                    $class = $ssc->studentClass;
+                    if (!$class) {
+                        continue;
+                    }
+
+                    $amount = round((float) $payment->amount, 2);
+                    $teacherPercentage = round((float) ($class->teacher_percentage ?? 0), 2);
+
+                    $teacherCut = round(($amount * $teacherPercentage) / 100, 2);
+                    $organizeCut = round(($amount * $organizePercentage) / 100, 2);
+                    $institutionCut = round($amount - ($teacherCut + $organizeCut), 2);
+
+                    $categoryLink = $ssc->classCategoryHasStudentClass;
+
+                    $defaultFee = (float) ($categoryLink->fees ?? 0);
+                    $isFreeCard = (bool) ($ssc->is_free_card ?? false);
+                    $customFee = $ssc->custom_fee;
+                    $discountPercentage = $ssc->discount_percentage;
+                    $discountType = $ssc->discount_type;
+
+                    $effectiveFee = $defaultFee;
+                    $effectiveFeeRule = 'default_fee';
+
+                    if ($isFreeCard) {
+                        $effectiveFee = 0;
+                        $effectiveFeeRule = 'free_card';
+                        $summary['free_card_count']++;
+                    } elseif (!is_null($customFee)) {
+                        $effectiveFee = (float) $customFee;
+                        $effectiveFeeRule = 'custom_fee';
+                        $summary['custom_fee_count']++;
+                    } elseif (!is_null($discountPercentage)) {
+                        $effectiveFee = round(
+                            $defaultFee - (($defaultFee * (float) $discountPercentage) / 100),
+                            2
+                        );
+                        $effectiveFeeRule = 'discount_percentage';
+                        $summary['discounted_count']++;
+
+                        if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                            $summary['half_card_count']++;
+                        }
+                    } else {
+                        $summary['default_fee_count']++;
+                    }
+
+                    $summary['payment_count'] += 1;
+                    $summary['total_payment_amount'] += $amount;
+                    $summary['gross_teacher_earning'] += $teacherCut;
+                    $summary['total_organize_cut'] += $organizeCut;
+                    $summary['institution_income'] += $institutionCut;
+
+                    $classId = $class->id;
+                    $className = $class->class_name ?? '-';
+                    $gradeName = optional($class->grade)->grade_name ?? '-';
+
+                    $categoryName = optional(
+                        optional($ssc->classCategoryHasStudentClass)->classCategory
+                    )->category_name ?? 'Uncategorized';
+
+                    if (!isset($classCategoryBreakdown[$classId])) {
+                        $classCategoryBreakdown[$classId] = [
+                            'class_id' => $classId,
+                            'class_name' => $className,
+                            'grade_name' => $gradeName,
+                            'teacher_percentage' => $teacherPercentage,
+                            'organize_percentage' => $organizePercentage,
+                            'categories' => []
+                        ];
+                    }
+
+                    if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName])) {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName] = [
+                            'category_name' => $categoryName,
+                            'payment_count' => 0,
+                            'total_amount' => 0.0,
+                            'teacher_cut' => 0.0,
+                            'organize_cut' => 0.0,
+                            'institution_cut' => 0.0,
+
+                            'free_card_count' => 0,
+                            'half_card_count' => 0,
+                            'custom_fee_count' => 0,
+                            'discounted_count' => 0,
+                            'default_fee_count' => 0,
+
+                            'groups' => [],
+                        ];
+                    }
+
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['payment_count'] += 1;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['total_amount'] += $amount;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['teacher_cut'] += $teacherCut;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['organize_cut'] += $organizeCut;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['institution_cut'] += $institutionCut;
+
+                    if ($effectiveFeeRule === 'free_card') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['free_card_count']++;
+                    } elseif ($effectiveFeeRule === 'custom_fee') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['custom_fee_count']++;
+                    } elseif ($effectiveFeeRule === 'discount_percentage') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['discounted_count']++;
+
+                        if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                            $classCategoryBreakdown[$classId]['categories'][$categoryName]['half_card_count']++;
+                        }
+                    } else {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['default_fee_count']++;
+                    }
+
+                    $feeKey = $effectiveFeeRule . '_' . number_format((float) $effectiveFee, 2, '.', '');
+
+                    if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey])) {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey] = [
+                            'type' => $effectiveFeeRule,
+                            'fee' => round((float) $effectiveFee, 2),
+                            'count' => 0,
+                            'total' => 0.0,
+                        ];
+                    }
+
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['count'] += 1;
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['total'] += $amount;
+
+                    $paymentDetails[] = [
+                        'payment_id' => $payment->id,
+                        'student_custom_id' => optional($payment->student)->custom_id,
+                        'student_name' => optional($payment->student)->initial_name
+                            ?? optional($payment->student)->full_name,
+                        'class_name' => $className,
+                        'grade_name' => $gradeName,
+                        'category_name' => $categoryName,
+                        'amount' => $amount,
+                        'default_fee' => round($defaultFee, 2),
+                        'effective_fee_reference' => round($effectiveFee, 2),
+                        'effective_fee_rule' => $effectiveFeeRule,
+                        'is_free_card' => $isFreeCard,
+                        'custom_fee' => !is_null($customFee) ? (float) $customFee : null,
+                        'discount_percentage' => !is_null($discountPercentage) ? (float) $discountPercentage : null,
+                        'discount_type' => $discountType,
+                        'teacher_percentage' => $teacherPercentage,
+                        'teacher_cut' => $teacherCut,
+                        'organize_cut' => $organizeCut,
+                        'institution_cut' => $institutionCut,
+                        'payment_date' => $payment->payment_date,
+                    ];
+                }
+
+                $classCategoryBreakdown = array_map(function ($classItem) {
+                    $classItem['categories'] = array_map(function ($category) {
+                        $category['total_amount'] = round((float) $category['total_amount'], 2);
+                        $category['teacher_cut'] = round((float) $category['teacher_cut'], 2);
+                        $category['organize_cut'] = round((float) $category['organize_cut'], 2);
+                        $category['institution_cut'] = round((float) $category['institution_cut'], 2);
+
+                        $groups = array_values($category['groups']);
+
+                        foreach ($groups as &$group) {
+                            $group['fee'] = round((float) $group['fee'], 2);
+                            $group['total'] = round((float) $group['total'], 2);
+                            $group['line'] = strtoupper(str_replace('_', ' ', $group['type']))
+                                . ' : '
+                                . number_format($group['fee'], 2)
+                                . ' × '
+                                . $group['count']
+                                . ' = '
+                                . number_format($group['total'], 2);
+                        }
+
+                        $category['groups'] = $groups;
+                        $category['calculation_lines'] = array_map(function ($group) {
+                            return $group['line'];
+                        }, $groups);
+
+                        return $category;
+                    }, array_values($classItem['categories']));
+
+                    return $classItem;
+                }, array_values($classCategoryBreakdown));
+
+                $summary['total_payment_amount'] = round($summary['total_payment_amount'], 2);
+                $summary['gross_teacher_earning'] = round($summary['gross_teacher_earning'], 2);
+                $summary['total_organize_cut'] = round($summary['total_organize_cut'], 2);
+                $summary['institution_income'] = round($summary['institution_income'], 2);
+                $summary['net_teacher_payable'] = round($summary['gross_teacher_earning'], 2);
+                $summary['weekly_salary'] = round($summary['gross_teacher_earning'], 2);
 
                 $weeklyResult[] = [
-                    'teacher_id' => $teacher['teacher_id'] ?? null,
-                    'teacher_name' => $teacher['teacher_name'] ?? '-',
-                    'monthly_salary' => round($netTeacherPayable, 2),
-                    'weekly_salary' => $weeklySalary,
+                    'teacher_id' => $teacher->id,
+                    'teacher_name' => $teacherDisplayName,
+                    'summary' => $summary,
+                    'class_category_breakdown' => $classCategoryBreakdown,
+                    'payment_details' => $paymentDetails,
                 ];
             }
 
             return response()->json([
                 'status' => 'success',
                 'type' => 'weekly',
-                'year_month' => $yearMonth,
-                'days_in_month' => $daysInMonth,
+                'from_date' => $fromDate->toDateString(),
+                'to_date' => $toDate->toDateString(),
                 'data' => $weeklyResult
             ]);
         } catch (Exception $e) {
@@ -1934,6 +2299,11 @@ class TeacherPaymentsService
                 ], 404);
             }
 
+            $firstName = $teacher->fname ?? '';
+            $lastName = $teacher->lname ?? '';
+            $teacherInitial = $firstName ? strtoupper(substr($firstName, 0, 1)) . '.' : '';
+            $teacherDisplayName = trim($teacherInitial . ' ' . $lastName);
+
             $payments = Payments::where('status', 1)
                 ->whereBetween('payment_date', [$startOfDay, $endOfDay])
                 ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherId) {
@@ -1941,42 +2311,93 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
+                    'student:id,custom_id,initial_name,full_name',
                     'studentStudentClass.studentClass.grade:id,grade_name',
                     'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
                     'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
+                    'studentStudentClass.classCategoryHasStudentClass:id,fees,class_category_id,student_classes_id',
+                    'studentStudentClass:id,student_id,student_classes_id,class_category_has_student_class_id,is_free_card,custom_fee,discount_percentage,discount_type',
                 ])
                 ->get();
 
-            $totalForDay = 0.0;
-            $grossTeacherEarning = 0.0;
-            $totalOrganizeCut = 0.0;
-            $paymentCount = 0;
+            $summary = [
+                'payment_count' => 0,
+                'total_payment_amount' => 0.0,
+                'gross_teacher_earning' => 0.0,
+                'total_organize_cut' => 0.0,
+                'institution_income' => 0.0,
+
+                'free_card_count' => 0,
+                'half_card_count' => 0,
+                'custom_fee_count' => 0,
+                'discounted_count' => 0,
+                'default_fee_count' => 0,
+            ];
 
             $classCategoryBreakdown = [];
+            $paymentDetails = [];
 
             foreach ($payments as $payment) {
-
                 $ssc = $payment->studentStudentClass;
-
-                if (!$ssc) continue;
+                if (!$ssc) {
+                    continue;
+                }
 
                 $class = $ssc->studentClass;
-                if (!$class) continue;
+                if (!$class) {
+                    continue;
+                }
 
-                $amount = (float) $payment->amount;
-                $teacherPercentage = (float) ($class->teacher_percentage ?? 0);
+                $amount = round((float) $payment->amount, 2);
+                $teacherPercentage = round((float) ($class->teacher_percentage ?? 0), 2);
 
+                // Salary calculation uses actual paid amount
                 $teacherCut = round(($amount * $teacherPercentage) / 100, 2);
                 $organizeCut = round(($amount * $organizePercentage) / 100, 2);
                 $institutionCut = round($amount - ($teacherCut + $organizeCut), 2);
 
-                // ✅ Summary
-                $totalForDay += $amount;
-                $grossTeacherEarning += $teacherCut;
-                $totalOrganizeCut += $organizeCut;
-                $paymentCount++;
+                // Enrollment-based effective fee reference
+                $categoryLink = $ssc->classCategoryHasStudentClass;
 
-                // 🔥 Class + Category structure
+                $defaultFee = (float) ($categoryLink->fees ?? 0);
+                $isFreeCard = (bool) ($ssc->is_free_card ?? false);
+                $customFee = $ssc->custom_fee;
+                $discountPercentage = $ssc->discount_percentage;
+                $discountType = $ssc->discount_type;
+
+                $effectiveFee = $defaultFee;
+                $effectiveFeeRule = 'default_fee';
+
+                if ($isFreeCard) {
+                    $effectiveFee = 0;
+                    $effectiveFeeRule = 'free_card';
+                    $summary['free_card_count']++;
+                } elseif (!is_null($customFee)) {
+                    $effectiveFee = (float) $customFee;
+                    $effectiveFeeRule = 'custom_fee';
+                    $summary['custom_fee_count']++;
+                } elseif (!is_null($discountPercentage)) {
+                    $effectiveFee = round(
+                        $defaultFee - (($defaultFee * (float) $discountPercentage) / 100),
+                        2
+                    );
+                    $effectiveFeeRule = 'discount_percentage';
+                    $summary['discounted_count']++;
+
+                    if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                        $summary['half_card_count']++;
+                    }
+                } else {
+                    $summary['default_fee_count']++;
+                }
+
+                // Summary totals
+                $summary['payment_count'] += 1;
+                $summary['total_payment_amount'] += $amount;
+                $summary['gross_teacher_earning'] += $teacherCut;
+                $summary['total_organize_cut'] += $organizeCut;
+                $summary['institution_income'] += $institutionCut;
+
                 $classId = $class->id;
                 $className = $class->class_name ?? '-';
                 $gradeName = optional($class->grade)->grade_name ?? '-';
@@ -2004,6 +2425,14 @@ class TeacherPaymentsService
                         'teacher_cut' => 0.0,
                         'organize_cut' => 0.0,
                         'institution_cut' => 0.0,
+
+                        'free_card_count' => 0,
+                        'half_card_count' => 0,
+                        'custom_fee_count' => 0,
+                        'discounted_count' => 0,
+                        'default_fee_count' => 0,
+
+                        'groups' => [],
                     ];
                 }
 
@@ -2012,15 +2441,91 @@ class TeacherPaymentsService
                 $classCategoryBreakdown[$classId]['categories'][$categoryName]['teacher_cut'] += $teacherCut;
                 $classCategoryBreakdown[$classId]['categories'][$categoryName]['organize_cut'] += $organizeCut;
                 $classCategoryBreakdown[$classId]['categories'][$categoryName]['institution_cut'] += $institutionCut;
+
+                if ($effectiveFeeRule === 'free_card') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['free_card_count']++;
+                } elseif ($effectiveFeeRule === 'custom_fee') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['custom_fee_count']++;
+                } elseif ($effectiveFeeRule === 'discount_percentage') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['discounted_count']++;
+
+                    if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['half_card_count']++;
+                    }
+                } else {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['default_fee_count']++;
+                }
+
+                // Group by effective fee + rule
+                $feeKey = $effectiveFeeRule . '_' . number_format((float) $effectiveFee, 2, '.', '');
+
+                if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey])) {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey] = [
+                        'type' => $effectiveFeeRule,
+                        'fee' => round((float) $effectiveFee, 2),
+                        'count' => 0,
+                        'total' => 0.0,
+                    ];
+                }
+
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['count'] += 1;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['total'] += $amount;
+
+                $paymentDetails[] = [
+                    'payment_id' => $payment->id,
+                    'student_custom_id' => optional($payment->student)->custom_id,
+                    'student_name' => optional($payment->student)->initial_name
+                        ?? optional($payment->student)->full_name,
+                    'class_name' => $className,
+                    'grade_name' => $gradeName,
+                    'category_name' => $categoryName,
+
+                    'amount' => $amount,
+
+                    'default_fee' => round($defaultFee, 2),
+                    'effective_fee_reference' => round($effectiveFee, 2),
+                    'effective_fee_rule' => $effectiveFeeRule,
+                    'is_free_card' => $isFreeCard,
+                    'custom_fee' => !is_null($customFee) ? (float) $customFee : null,
+                    'discount_percentage' => !is_null($discountPercentage) ? (float) $discountPercentage : null,
+                    'discount_type' => $discountType,
+
+                    'teacher_percentage' => $teacherPercentage,
+                    'teacher_cut' => $teacherCut,
+                    'organize_cut' => $organizeCut,
+                    'institution_cut' => $institutionCut,
+                    'payment_date' => $payment->payment_date,
+                ];
             }
 
-            // 🔥 format arrays
+            // Format category breakdown correctly
             $classCategoryBreakdown = array_map(function ($classItem) {
-                $classItem['categories'] = array_values($classItem['categories']);
+                $classItem['categories'] = array_map(function ($category) {
+                    $category['total_amount'] = round((float) $category['total_amount'], 2);
+                    $category['teacher_cut'] = round((float) $category['teacher_cut'], 2);
+                    $category['organize_cut'] = round((float) $category['organize_cut'], 2);
+                    $category['institution_cut'] = round((float) $category['institution_cut'], 2);
+
+                    $groups = array_values($category['groups']);
+
+                    foreach ($groups as &$group) {
+                        $group['fee'] = round((float) $group['fee'], 2);
+                        $group['total'] = round((float) $group['total'], 2);
+                        $group['line'] = number_format($group['fee'], 2) . ' × ' . $group['count'] . ' = ' . number_format($group['total'], 2);
+                    }
+
+                    $category['groups'] = $groups;
+                    $category['calculation_lines'] = array_map(function ($group) {
+                        return $group['line'];
+                    }, $groups);
+
+                    return $category;
+                }, array_values($classItem['categories']));
+
                 return $classItem;
             }, array_values($classCategoryBreakdown));
 
-            // advance (exclude salary)
+            // Advance deducted (exclude salary)
             $advanceDeducted = (float) TeacherPayment::where('teacher_id', $teacherId)
                 ->where('status', 1)
                 ->where('reason_code', '!=', 'salary')
@@ -2030,13 +2535,15 @@ class TeacherPaymentsService
                 ])
                 ->sum('payment');
 
-            $totalForDay = round($totalForDay, 2);
-            $grossTeacherEarning = round($grossTeacherEarning, 2);
-            $totalOrganizeCut = round($totalOrganizeCut, 2);
-            $advanceDeducted = round($advanceDeducted, 2);
-
-            $institutionIncome = round($totalForDay - ($grossTeacherEarning + $totalOrganizeCut), 2);
-            $netPayable = round(max($grossTeacherEarning - $advanceDeducted, 0), 2);
+            $summary['total_payment_amount'] = round($summary['total_payment_amount'], 2);
+            $summary['gross_teacher_earning'] = round($summary['gross_teacher_earning'], 2);
+            $summary['total_organize_cut'] = round($summary['total_organize_cut'], 2);
+            $summary['institution_income'] = round($summary['institution_income'], 2);
+            $summary['advance_deducted_for_day'] = round($advanceDeducted, 2);
+            $summary['net_teacher_payable'] = round(
+                max($summary['gross_teacher_earning'] - $summary['advance_deducted_for_day'], 0),
+                2
+            );
 
             return response()->json([
                 'status' => 'success',
@@ -2044,15 +2551,10 @@ class TeacherPaymentsService
                 'date' => $selectedDate->toDateString(),
                 'data' => [
                     'teacher_id' => $teacher->id,
-                    'teacher_name' => trim(($teacher->fname ?? '') . ' ' . ($teacher->lname ?? '')),
-                    'payment_count' => $paymentCount,
-                    'total_payment_amount' => $totalForDay,
-                    'gross_teacher_earning' => $grossTeacherEarning,
-                    'total_organize_cut' => $totalOrganizeCut,
-                    'advance_deducted_for_day' => $advanceDeducted,
-                    'net_teacher_payable' => $netPayable,
-                    'institution_income' => $institutionIncome,
+                    'teacher_name' => $teacherDisplayName,
+                    'summary' => $summary,
                     'class_category_breakdown' => $classCategoryBreakdown,
+                    'payment_details' => $paymentDetails,
                 ]
             ]);
         } catch (Exception $e) {
@@ -2095,6 +2597,11 @@ class TeacherPaymentsService
                 ], 404);
             }
 
+            $firstName = $teacher->fname ?? '';
+            $lastName = $teacher->lname ?? '';
+            $teacherInitial = $firstName ? strtoupper(substr($firstName, 0, 1)) . '.' : '';
+            $teacherDisplayName = trim($teacherInitial . ' ' . $lastName);
+
             $payments = Payments::where('status', 1)
                 ->whereBetween('payment_date', [$startOfWeek, $endOfWeek])
                 ->whereHas('studentStudentClass.studentClass', function ($q) use ($teacherId) {
@@ -2102,55 +2609,220 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage'
+                    'student:id,custom_id,initial_name,full_name',
+                    'studentStudentClass.studentClass.grade:id,grade_name',
+                    'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
+                    'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
+                    'studentStudentClass.classCategoryHasStudentClass:id,fees,class_category_id,student_classes_id',
+                    'studentStudentClass:id,student_id,student_classes_id,class_category_has_student_class_id,is_free_card,custom_fee,discount_percentage,discount_type',
                 ])
                 ->get();
 
-            $totalForWeek = 0.0;
-            $grossTeacherEarning = 0.0;
-            $totalOrganizeCut = 0.0;
-            $paymentCount = 0;
-            $classWise = [];
+            $summary = [
+                'payment_count' => 0,
+                'total_payment_amount' => 0.0,
+                'gross_teacher_earning' => 0.0,
+                'total_organize_cut' => 0.0,
+                'institution_income' => 0.0,
+
+                'free_card_count' => 0,
+                'half_card_count' => 0,
+                'custom_fee_count' => 0,
+                'discounted_count' => 0,
+                'default_fee_count' => 0,
+            ];
+
+            $classCategoryBreakdown = [];
+            $paymentDetails = [];
 
             foreach ($payments as $payment) {
-                $class = optional(optional($payment->studentStudentClass)->studentClass);
-
-                if (!$class || !$class->id) {
+                $ssc = $payment->studentStudentClass;
+                if (!$ssc) {
                     continue;
                 }
 
-                $amount = (float) $payment->amount;
-                $teacherPercentage = (float) ($class->teacher_percentage ?? 0);
+                $class = $ssc->studentClass;
+                if (!$class) {
+                    continue;
+                }
+
+                $amount = round((float) $payment->amount, 2);
+                $teacherPercentage = round((float) ($class->teacher_percentage ?? 0), 2);
 
                 $teacherCut = round(($amount * $teacherPercentage) / 100, 2);
                 $organizeCut = round(($amount * $organizePercentage) / 100, 2);
                 $institutionCut = round($amount - ($teacherCut + $organizeCut), 2);
 
-                $totalForWeek += $amount;
-                $grossTeacherEarning += $teacherCut;
-                $totalOrganizeCut += $organizeCut;
-                $paymentCount++;
+                $categoryLink = $ssc->classCategoryHasStudentClass;
 
-                if (!isset($classWise[$class->id])) {
-                    $classWise[$class->id] = [
-                        'class_id' => $class->id,
-                        'class_name' => $class->class_name ?? '-',
+                $defaultFee = (float) ($categoryLink->fees ?? 0);
+                $isFreeCard = (bool) ($ssc->is_free_card ?? false);
+                $customFee = $ssc->custom_fee;
+                $discountPercentage = $ssc->discount_percentage;
+                $discountType = $ssc->discount_type;
+
+                $effectiveFee = $defaultFee;
+                $effectiveFeeRule = 'default_fee';
+
+                if ($isFreeCard) {
+                    $effectiveFee = 0;
+                    $effectiveFeeRule = 'free_card';
+                    $summary['free_card_count']++;
+                } elseif (!is_null($customFee)) {
+                    $effectiveFee = (float) $customFee;
+                    $effectiveFeeRule = 'custom_fee';
+                    $summary['custom_fee_count']++;
+                } elseif (!is_null($discountPercentage)) {
+                    $effectiveFee = round(
+                        $defaultFee - (($defaultFee * (float) $discountPercentage) / 100),
+                        2
+                    );
+                    $effectiveFeeRule = 'discount_percentage';
+                    $summary['discounted_count']++;
+
+                    if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                        $summary['half_card_count']++;
+                    }
+                } else {
+                    $summary['default_fee_count']++;
+                }
+
+                $summary['payment_count'] += 1;
+                $summary['total_payment_amount'] += $amount;
+                $summary['gross_teacher_earning'] += $teacherCut;
+                $summary['total_organize_cut'] += $organizeCut;
+                $summary['institution_income'] += $institutionCut;
+
+                $classId = $class->id;
+                $className = $class->class_name ?? '-';
+                $gradeName = optional($class->grade)->grade_name ?? '-';
+
+                $categoryName = optional(
+                    optional($ssc->classCategoryHasStudentClass)->classCategory
+                )->category_name ?? 'Uncategorized';
+
+                if (!isset($classCategoryBreakdown[$classId])) {
+                    $classCategoryBreakdown[$classId] = [
+                        'class_id' => $classId,
+                        'class_name' => $className,
+                        'grade_name' => $gradeName,
                         'teacher_percentage' => $teacherPercentage,
                         'organize_percentage' => $organizePercentage,
+                        'categories' => []
+                    ];
+                }
+
+                if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName])) {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName] = [
+                        'category_name' => $categoryName,
                         'payment_count' => 0,
                         'total_amount' => 0.0,
                         'teacher_cut' => 0.0,
                         'organize_cut' => 0.0,
                         'institution_cut' => 0.0,
+
+                        'free_card_count' => 0,
+                        'half_card_count' => 0,
+                        'custom_fee_count' => 0,
+                        'discounted_count' => 0,
+                        'default_fee_count' => 0,
+
+                        'groups' => [],
                     ];
                 }
 
-                $classWise[$class->id]['payment_count'] += 1;
-                $classWise[$class->id]['total_amount'] += $amount;
-                $classWise[$class->id]['teacher_cut'] += $teacherCut;
-                $classWise[$class->id]['organize_cut'] += $organizeCut;
-                $classWise[$class->id]['institution_cut'] += $institutionCut;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['payment_count'] += 1;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['total_amount'] += $amount;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['teacher_cut'] += $teacherCut;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['organize_cut'] += $organizeCut;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['institution_cut'] += $institutionCut;
+
+                if ($effectiveFeeRule === 'free_card') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['free_card_count']++;
+                } elseif ($effectiveFeeRule === 'custom_fee') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['custom_fee_count']++;
+                } elseif ($effectiveFeeRule === 'discount_percentage') {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['discounted_count']++;
+
+                    if ((float) $discountPercentage === 50.0 || $discountType === 'half_card') {
+                        $classCategoryBreakdown[$classId]['categories'][$categoryName]['half_card_count']++;
+                    }
+                } else {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['default_fee_count']++;
+                }
+
+                $feeKey = $effectiveFeeRule . '_' . number_format((float) $effectiveFee, 2, '.', '');
+
+                if (!isset($classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey])) {
+                    $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey] = [
+                        'type' => $effectiveFeeRule,
+                        'fee' => round((float) $effectiveFee, 2),
+                        'count' => 0,
+                        'total' => 0.0,
+                    ];
+                }
+
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['count'] += 1;
+                $classCategoryBreakdown[$classId]['categories'][$categoryName]['groups'][$feeKey]['total'] += $amount;
+
+                $paymentDetails[] = [
+                    'payment_id' => $payment->id,
+                    'student_custom_id' => optional($payment->student)->custom_id,
+                    'student_name' => optional($payment->student)->initial_name
+                        ?? optional($payment->student)->full_name,
+                    'class_name' => $className,
+                    'grade_name' => $gradeName,
+                    'category_name' => $categoryName,
+
+                    'amount' => $amount,
+
+                    'default_fee' => round($defaultFee, 2),
+                    'effective_fee_reference' => round($effectiveFee, 2),
+                    'effective_fee_rule' => $effectiveFeeRule,
+                    'is_free_card' => $isFreeCard,
+                    'custom_fee' => !is_null($customFee) ? (float) $customFee : null,
+                    'discount_percentage' => !is_null($discountPercentage) ? (float) $discountPercentage : null,
+                    'discount_type' => $discountType,
+
+                    'teacher_percentage' => $teacherPercentage,
+                    'teacher_cut' => $teacherCut,
+                    'organize_cut' => $organizeCut,
+                    'institution_cut' => $institutionCut,
+                    'payment_date' => $payment->payment_date,
+                ];
             }
+
+            $classCategoryBreakdown = array_map(function ($classItem) {
+                $classItem['categories'] = array_map(function ($category) {
+                    $category['total_amount'] = round((float) $category['total_amount'], 2);
+                    $category['teacher_cut'] = round((float) $category['teacher_cut'], 2);
+                    $category['organize_cut'] = round((float) $category['organize_cut'], 2);
+                    $category['institution_cut'] = round((float) $category['institution_cut'], 2);
+
+                    $groups = array_values($category['groups']);
+
+                    foreach ($groups as &$group) {
+                        $group['fee'] = round((float) $group['fee'], 2);
+                        $group['total'] = round((float) $group['total'], 2);
+                        $group['line'] = strtoupper(str_replace('_', ' ', $group['type']))
+                            . ' : '
+                            . number_format($group['fee'], 2)
+                            . ' × '
+                            . $group['count']
+                            . ' = '
+                            . number_format($group['total'], 2);
+                    }
+
+                    $category['groups'] = $groups;
+                    $category['calculation_lines'] = array_map(function ($group) {
+                        return $group['line'];
+                    }, $groups);
+
+                    return $category;
+                }, array_values($classItem['categories']));
+
+                return $classItem;
+            }, array_values($classCategoryBreakdown));
 
             $advanceDeducted = (float) TeacherPayment::where('teacher_id', $teacherId)
                 ->where('status', 1)
@@ -2158,13 +2830,15 @@ class TeacherPaymentsService
                 ->whereBetween('created_at', [$startOfWeek, $endOfWeek])
                 ->sum('payment');
 
-            $totalForWeek = round($totalForWeek, 2);
-            $grossTeacherEarning = round($grossTeacherEarning, 2);
-            $totalOrganizeCut = round($totalOrganizeCut, 2);
-            $advanceDeducted = round($advanceDeducted, 2);
-
-            $institutionIncome = round($totalForWeek - ($grossTeacherEarning + $totalOrganizeCut), 2);
-            $netPayable = round(max($grossTeacherEarning - $advanceDeducted, 0), 2);
+            $summary['total_payment_amount'] = round($summary['total_payment_amount'], 2);
+            $summary['gross_teacher_earning'] = round($summary['gross_teacher_earning'], 2);
+            $summary['total_organize_cut'] = round($summary['total_organize_cut'], 2);
+            $summary['institution_income'] = round($summary['institution_income'], 2);
+            $summary['advance_deducted_for_week'] = round($advanceDeducted, 2);
+            $summary['net_teacher_payable'] = round(
+                max($summary['gross_teacher_earning'] - $summary['advance_deducted_for_week'], 0),
+                2
+            );
 
             return response()->json([
                 'status' => 'success',
@@ -2173,15 +2847,10 @@ class TeacherPaymentsService
                 'end_date' => $endOfWeek->toDateString(),
                 'data' => [
                     'teacher_id' => $teacher->id,
-                    'teacher_name' => trim(($teacher->fname ?? '') . ' ' . ($teacher->lname ?? '')),
-                    'payment_count' => $paymentCount,
-                    'total_payment_amount' => $totalForWeek,
-                    'gross_teacher_earning' => $grossTeacherEarning,
-                    'total_organize_cut' => $totalOrganizeCut,
-                    'advance_deducted_for_week' => $advanceDeducted,
-                    'net_teacher_payable' => $netPayable,
-                    'institution_income' => $institutionIncome,
-                    'class_wise_breakdown' => array_values($classWise),
+                    'teacher_name' => $teacherDisplayName,
+                    'summary' => $summary,
+                    'class_category_breakdown' => $classCategoryBreakdown,
+                    'payment_details' => $paymentDetails,
                 ]
             ]);
         } catch (Exception $e) {

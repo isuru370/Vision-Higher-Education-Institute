@@ -41,10 +41,9 @@ class TeacherPaymentsController extends Controller
     public function fetchTeacherPaymentsDaily(Request $request)
     {
         try {
-            $response = $this->teacherPaymentsService->fetchTeacherPaymentsDaily();
+            $response = $this->teacherPaymentsService->fetchTeachersPaymentsDaily($request);
             $result = $response->getData(true);
 
-            // check success
             if (($result['status'] ?? 'error') !== 'success') {
                 return response()->json([
                     'status' => 'error',
@@ -74,10 +73,10 @@ class TeacherPaymentsController extends Controller
         }
     }
 
-    public function fetchTeacherPaymentsWeekly()
+    public function fetchTeacherPaymentsWeekly(Request $request)
     {
         try {
-            $response = $this->teacherPaymentsService->fetchTeacherPaymentsWeekly();
+            $response = $this->teacherPaymentsService->fetchTeachersPaymentsWeekly($request);
             $result = $response->getData(true);
 
             if (($result['status'] ?? 'error') !== 'success') {
@@ -88,13 +87,16 @@ class TeacherPaymentsController extends Controller
             }
 
             $data = $result['data'] ?? [];
-            $yearMonth = $result['year_month'] ?? now()->format('Y-m');
 
-            $filename = "weekly_teacher_payments_{$yearMonth}.pdf";
+            $fromDate = $result['from_date'] ?? now()->toDateString();
+            $toDate = $result['to_date'] ?? now()->toDateString();
+
+            $filename = "weekly_teacher_payments_{$fromDate}_to_{$toDate}.pdf";
 
             $pdf = Pdf::loadView('reports.pdf.weekly-payments', [
                 'data' => $data,
-                'year_month' => $yearMonth,
+                'from_date' => $fromDate,
+                'to_date' => $toDate,
             ]);
 
             return $pdf->download($filename);

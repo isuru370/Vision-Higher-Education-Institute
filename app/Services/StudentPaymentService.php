@@ -236,6 +236,132 @@ class StudentPaymentService
         }
     }
 
+    public function fetchTodayPayments()
+    {
+        try {
+            $today = Carbon::today();
+
+            $payments = Payments::with([
+                'student',
+                'studentStudentClass.classCategoryHasStudentClass.classCategory',
+                'studentStudentClass.studentClass.teacher',
+                'studentStudentClass.studentClass.grade',
+                'studentStudentClass.studentClass.subject',
+            ])
+                ->where('status', 1)
+                ->whereDate('payment_date', $today)
+                ->orderBy('payment_date', 'desc')
+                ->get();
+
+            if ($payments->isEmpty()) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'No payments found for today',
+                    'total_payments' => 0,
+                    'total_amount' => 0,
+                    'data' => []
+                ], 200);
+            }
+
+            $result = $payments->map(function ($payment) {
+                $studentClassModel = $payment->studentStudentClass;
+                $studentClass = optional($studentClassModel)->studentClass;
+                $teacher = optional($studentClass)->teacher;
+                $grade = optional($studentClass)->grade;
+                $subject = optional($studentClass)->subject;
+                $classCategoryHasStudentClass = optional($studentClassModel)->classCategoryHasStudentClass;
+                $classCategory = optional($classCategoryHasStudentClass)->classCategory;
+
+                $defaultFee = optional($classCategoryHasStudentClass)->fees ?? 0;
+
+                if ($studentClassModel && $studentClassModel->is_free_card) {
+                    $finalFee = 0;
+                    $feeType = 'Free Card';
+                } elseif ($studentClassModel && !is_null($studentClassModel->custom_fee)) {
+                    $finalFee = $studentClassModel->custom_fee;
+                    $feeType = 'Custom Fee';
+                } elseif ($studentClassModel && !is_null($studentClassModel->discount_percentage)) {
+                    $finalFee = $defaultFee * (1 - ($studentClassModel->discount_percentage / 100));
+                    $feeType = $studentClassModel->discount_percentage . '% Discount';
+                } else {
+                    $finalFee = $defaultFee;
+                    $feeType = 'Normal';
+                }
+
+                return [
+                    'payment_id' => $payment->id,
+                    'student_id' => $payment->student_id,
+                    'student_student_student_classes_id' => $payment->student_student_student_classes_id,
+                    'amount' => $payment->amount,
+                    'payment_date' => $payment->payment_date,
+                    'payment_for_month' => $payment->payment_for,
+                    'status' => $payment->status,
+
+                    'student' => [
+                        'id' => optional($payment->student)->id,
+                        'qr_code' => optional($payment->student)->permanent_qr_active
+                            ? optional($payment->student)->custom_id
+                            : optional($payment->student)->temporary_qr_code,
+                        'full_name' => optional($payment->student)->full_name,
+                        'initial_name' => optional($payment->student)->initial_name,
+                        'guardian_mobile' => optional($payment->student)->guardian_mobile,
+                        'img_url' => optional($payment->student)->img_url,
+                    ],
+
+                    'class_payment_details' => [
+                        'default_fee' => $defaultFee,
+                        'final_fee' => round($finalFee, 2),
+                        'fee_type' => $feeType,
+                        'is_free_card' => (bool) optional($studentClassModel)->is_free_card,
+                        'custom_fee' => optional($studentClassModel)->custom_fee,
+                        'discount_percentage' => optional($studentClassModel)->discount_percentage,
+                        'discount_type' => optional($studentClassModel)->discount_type,
+                    ],
+
+                    'class_category_has_student_class' => [
+                        'id' => optional($classCategoryHasStudentClass)->id,
+                        'fees' => $defaultFee,
+                        'class_category' => [
+                            'category_name' => optional($classCategory)->category_name,
+                        ]
+                    ],
+
+                    'student_class' => [
+                        'id' => optional($studentClass)->id,
+                        'class_name' => optional($studentClass)->class_name,
+                        'teacher' => $teacher ? [
+                            'id' => optional($teacher)->id,
+                            'teacher_name' => trim(
+                                (optional($teacher)->fname ?? '') . ' ' . (optional($teacher)->lname ?? '')
+                            )
+                        ] : null,
+                        'grade' => $grade ? [
+                            'grade_name' => optional($grade)->grade_name
+                        ] : null,
+                        'subject' => $subject ? [
+                            'subject_name' => optional($subject)->subject_name
+                        ] : null,
+                    ],
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Today payments fetched successfully',
+                'total_payments' => $payments->count(),
+                'total_amount' => $payments->sum('amount'),
+                'data' => $result
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch today payments',
+                'data' => [],
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 
 
     private function formatPaymentsForMonthlyView($payments)

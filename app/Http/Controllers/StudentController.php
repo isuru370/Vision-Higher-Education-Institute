@@ -23,6 +23,13 @@ class StudentController extends Controller
     {
         return $this->studentService->fetchStudents();
     }
+
+    public function fetchAllStudents(Request $request)
+    {
+        return $this->studentService->fetchAllStudents($request);
+    }
+
+
     public function fetchAllStudentCustomIDs()
     {
         return $this->studentService->fetchAllStudentCustomIDs();

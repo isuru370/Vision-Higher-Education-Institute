@@ -84,7 +84,7 @@
                             <p class="text-muted mb-0">Manage all students and their information</p>
                         </div>
                         <div class="d-flex gap-2">
-                            <button class="btn btn-outline-primary" onclick="loadStudents()" title="Refresh">
+                            <button class="btn btn-outline-primary" onclick="refreshData()" title="Refresh">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
                             <a href="{{ route('students.create') }}" class="btn btn-primary">
@@ -96,7 +96,7 @@
 
                 <div class="card-body position-relative">
                     <!-- Loading Spinner -->
-                    <div id="loadingSpinner" class="text-center py-4">
+                    <div id="loadingSpinner" class="text-center py-4 d-none">
                         <div class="spinner-border text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
@@ -110,8 +110,8 @@
                     </div>
 
                     <!-- Action Bar -->
-                    <div class="d-none" id="actionBar">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div id="actionBar">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <!-- Filter Buttons -->
                                 <div class="btn-group btn-group-sm me-2">
@@ -128,7 +128,6 @@
                                     <label for="gradeFilter" class="form-label text-muted mb-0 me-2">Grade:</label>
                                     <select class="form-select form-select-sm" id="gradeFilter" style="width: 120px;">
                                         <option value="">All Grades</option>
-                                        <!-- Grades will be dynamically populated via JavaScript -->
                                     </select>
                                 </div>
 
@@ -137,24 +136,34 @@
                                     <label for="rowsPerPage" class="form-label text-muted mb-0 me-2">Show:</label>
                                     <select class="form-select form-select-sm" id="rowsPerPage" style="width: 80px;">
                                         <option value="10">10</option>
-                                        <option value="25">25</option>
+                                        <option value="25" selected>25</option>
                                         <option value="50">50</option>
                                         <option value="100">100</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <!-- Search Box -->
-                            <div class="input-group input-group-sm" style="width: 280px;">
+                            <!-- Search Box - Value stays visible while loading -->
+                            <div class="input-group input-group-sm" style="width: 320px;">
                                 <span class="input-group-text bg-transparent">
                                     <i class="fas fa-search"></i>
                                 </span>
-                                <input type="text" class="form-control" placeholder="Search students..." id="searchInput"
-                                    autocomplete="off">
-                                <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" title="Clear">
+                                <input type="text" class="form-control" 
+                                       placeholder="Search by name, email, phone or ID..." 
+                                       id="searchInput"
+                                       autocomplete="off"
+                                       value="">
+                                <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" title="Clear Search">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
+                        </div>
+                        
+                        <!-- Search Results Info -->
+                        <div id="searchResultsInfo" class="small text-muted mb-2 d-none">
+                            <i class="fas fa-search me-1"></i>
+                            Found <span id="searchResultsCount">0</span> result(s) for "<strong id="searchTerm"></strong>"
+                            <button class="btn btn-link btn-sm p-0 ms-2" id="clearSearchLink">Clear</button>
                         </div>
                     </div>
 
@@ -180,7 +189,7 @@
                     </div>
 
                     <!-- Pagination -->
-                    <div class="row mt-3 d-none" id="paginationSection">
+                    <div class="row mt-3" id="paginationSection">
                         <div class="col-md-6">
                             <div class="text-muted" id="paginationInfo">
                                 Showing <span id="startRecord">0</span> to <span id="endRecord">0</span> of <span
@@ -201,7 +210,7 @@
                             <i class="fas fa-users fa-4x text-muted mb-4"></i>
                         </div>
                         <h4 class="text-muted">No Students Found</h4>
-                        <p class="text-muted mb-4">There are no students in the database yet.</p>
+                        <p class="text-muted mb-4" id="emptyStateMessage">There are no students in the database yet.</p>
                         <a href="{{ route('students.create') }}" class="btn btn-primary btn-lg">
                             <i class="fas fa-plus me-2"></i>Add First Student
                         </a>
@@ -212,16 +221,14 @@
     </div>
 
     <!-- Activate Student Modal -->
-    <div class="modal fade" id="activateStudentModal" tabindex="-1" aria-labelledby="activateStudentModalLabel"
-        aria-hidden="true">
+    <div class="modal fade" id="activateStudentModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title">
                         <i class="fas fa-user-check me-2"></i>Activate Student
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <p>Are you sure you want to activate this student?</p>
@@ -243,16 +250,14 @@
     </div>
 
     <!-- Deactivate Student Modal -->
-    <div class="modal fade" id="deactivateStudentModal" tabindex="-1" aria-labelledby="deactivateStudentModalLabel"
-        aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal fade" id="deactivateStudentModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-white">
-                    <h5 class="modal-title" id="deactivateStudentModalLabel">
+                    <h5 class="modal-title">
                         <i class="fas fa-user-slash me-2"></i>Deactivate Student
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <p>Are you sure you want to deactivate this student?</p>
@@ -269,8 +274,7 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="fas fa-times me-2"></i>Cancel
                     </button>
-                    <button type="button" class="btn btn-warning" id="confirmDeactivateBtn"
-                        aria-describedby="deactivateWarning">
+                    <button type="button" class="btn btn-warning" id="confirmDeactivateBtn">
                         <i class="fas fa-user-slash me-2"></i>Deactivate Student
                     </button>
                 </div>
@@ -367,28 +371,50 @@
             color: white;
             border-color: #2c3e50;
         }
+        
+        /* Table loading overlay */
+        .table-loading {
+            position: relative;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .table-loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
     </style>
 @endpush
 
 @push('scripts')
     <script>
-        // Global variables for pagination
+        // Global variables
         let currentPage = 1;
         let totalPages = 1;
-        let rowsPerPage = 10;
+        let rowsPerPage = 25;
         let totalRecords = 0;
         let currentStatusFilter = '';
         let currentGradeFilter = '';
         let currentSearch = '';
-        let allGrades = []; // Store grades for filtering
+        let allGrades = [];
+        let searchTimeout = null;
 
         // Wait for the DOM to be loaded
         document.addEventListener('DOMContentLoaded', function () {
-            initializeStudentsPage();
+            initializePage();
         });
 
-        function initializeStudentsPage() {
-            // Load grades on page load
+        function initializePage() {
+            // Load grades
             loadGrades();
 
             // Initial load of students
@@ -399,6 +425,7 @@
             const gradeFilterEl = document.getElementById('gradeFilter');
             const searchInputEl = document.getElementById('searchInput');
             const clearSearchBtn = document.getElementById('clearSearchBtn');
+            const clearSearchLink = document.getElementById('clearSearchLink');
             const filterAllEl = document.getElementById('filterAll');
             const filterActiveEl = document.getElementById('filterActive');
             const filterInactiveEl = document.getElementById('filterInactive');
@@ -421,20 +448,34 @@
                 });
             }
 
+            // Search with debounce - doesn't clear the search input value
             if (searchInputEl) {
-                searchInputEl.addEventListener('input', debounce(function (e) {
-                    currentSearch = e.target.value;
-                    currentPage = 1;
-                    loadStudents(currentPage);
-                }, 300));
+                searchInputEl.addEventListener('input', function(e) {
+                    const searchTerm = e.target.value;
+                    
+                    // Clear previous timeout
+                    if (searchTimeout) {
+                        clearTimeout(searchTimeout);
+                    }
+                    
+                    // Debounce search
+                    searchTimeout = setTimeout(() => {
+                        currentSearch = searchTerm;
+                        currentPage = 1;
+                        loadStudents(currentPage);
+                    }, 500);
+                });
             }
 
             if (clearSearchBtn) {
-                clearSearchBtn.addEventListener('click', function () {
-                    document.getElementById('searchInput').value = '';
-                    currentSearch = '';
-                    currentPage = 1;
-                    loadStudents(currentPage);
+                clearSearchBtn.addEventListener('click', function() {
+                    clearSearch();
+                });
+            }
+            
+            if (clearSearchLink) {
+                clearSearchLink.addEventListener('click', function() {
+                    clearSearch();
                 });
             }
 
@@ -457,7 +498,7 @@
                 });
             }
 
-            // Activate/Deactivate modal events
+            // Modal events
             if (confirmActivateBtn) {
                 confirmActivateBtn.addEventListener('click', confirmActivateStudent);
             }
@@ -466,17 +507,28 @@
                 confirmDeactivateBtn.addEventListener('click', confirmDeactivateStudent);
             }
         }
+        
+        function clearSearch() {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = '';
+                currentSearch = '';
+                currentPage = 1;
+                loadStudents(currentPage);
+            }
+        }
+        
+        function refreshData() {
+            loadStudents(currentPage);
+        }
 
-        // Load grades from API
         function loadGrades() {
             const gradeFilter = document.getElementById('gradeFilter');
             if (!gradeFilter) return;
 
             fetch("{{ url('/api/grades/dropdown') }}")
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
@@ -492,17 +544,14 @@
                 });
         }
 
-        // Populate grade filter dropdown
         function populateGradeFilter(grades) {
             const gradeFilter = document.getElementById('gradeFilter');
             if (!gradeFilter) return;
 
-            // Clear existing options except the first one ("All Grades")
             while (gradeFilter.options.length > 1) {
                 gradeFilter.remove(1);
             }
 
-            // Add grade options from API
             grades.forEach(grade => {
                 const option = document.createElement('option');
                 option.value = grade.id;
@@ -512,12 +561,9 @@
         }
 
         function setActiveFilter(button, status) {
-            // Remove active class from all filter buttons
             document.querySelectorAll('#actionBar .btn-group .btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-
-            // Add active class to clicked button
             button.classList.add('active');
 
             currentStatusFilter = status;
@@ -525,9 +571,12 @@
             loadStudents(currentPage);
         }
 
-        // Main function to load students from API with pagination
         function loadStudents(page = 1) {
-            showLoadingState();
+            // Show loading overlay on table only, not clearing search
+            showTableLoading();
+            
+            // Hide any existing error
+            hideError();
 
             // Build query parameters
             let params = new URLSearchParams({
@@ -535,28 +584,23 @@
                 per_page: rowsPerPage
             });
 
-            // Add search parameter
-            if (currentSearch) {
+            if (currentSearch && currentSearch !== '') {
                 params.append('search', currentSearch);
             }
 
-            // Add Active/Inactive filter parameter
             if (currentStatusFilter === 'active') {
                 params.append('is_active', '1');
             } else if (currentStatusFilter === 'inactive') {
                 params.append('is_active', '0');
             }
 
-            // Add Grade filter parameter
             if (currentGradeFilter && currentGradeFilter !== '') {
                 params.append('grade_id', currentGradeFilter);
             }
 
             fetch(`{{ url('/api/students') }}?${params.toString()}`)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
@@ -564,7 +608,6 @@
                         const students = data.data.students || [];
                         const pagination = data.data.pagination;
 
-                        // Update pagination variables
                         currentPage = pagination.current_page;
                         totalPages = pagination.last_page;
                         totalRecords = pagination.total;
@@ -573,22 +616,87 @@
                         renderStudentsTable(students);
                         updatePagination();
                         updateStatistics(students);
-                        showContentState();
+                        updateSearchResultsInfo(students.length, pagination.total);
                     } else {
                         throw new Error(data.message || 'Failed to load students');
                     }
                 })
                 .catch(error => {
                     console.error('Error loading students:', error);
-                    showErrorState('Error loading students: ' + error.message);
+                    showError('Error loading students: ' + error.message);
+                    renderEmptyTable();
+                })
+                .finally(() => {
+                    hideTableLoading();
                 });
+        }
+        
+        function showTableLoading() {
+            const tableContainer = document.getElementById('studentsTableContainer');
+            if (tableContainer) {
+                tableContainer.classList.add('table-loading');
+            }
+        }
+        
+        function hideTableLoading() {
+            const tableContainer = document.getElementById('studentsTableContainer');
+            if (tableContainer) {
+                tableContainer.classList.remove('table-loading');
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            if (errorDiv && errorText) {
+                errorText.textContent = message;
+                errorDiv.classList.remove('d-none');
+            }
+        }
+        
+        function hideError() {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.classList.add('d-none');
+            }
+        }
+        
+        function renderEmptyTable() {
+            const tbody = document.getElementById('studentsTableBody');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                            No students found
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
+        function updateSearchResultsInfo(resultsCount, totalResults) {
+            const searchResultsInfo = document.getElementById('searchResultsInfo');
+            const searchTermSpan = document.getElementById('searchTerm');
+            const searchResultsCount = document.getElementById('searchResultsCount');
+            
+            if (currentSearch && currentSearch !== '') {
+                if (searchTermSpan) searchTermSpan.textContent = currentSearch;
+                if (searchResultsCount) searchResultsCount.textContent = totalResults;
+                if (searchResultsInfo) {
+                    searchResultsInfo.classList.remove('d-none');
+                }
+            } else {
+                if (searchResultsInfo) searchResultsInfo.classList.add('d-none');
+            }
         }
 
         function renderStudentsTable(students) {
             const tbody = document.getElementById('studentsTableBody');
-            const tableContainer = document.getElementById('studentsTableContainer');
             const emptyState = document.getElementById('emptyState');
             const paginationSection = document.getElementById('paginationSection');
+            const tableContainer = document.getElementById('studentsTableContainer');
+            const emptyStateMessage = document.getElementById('emptyStateMessage');
 
             if (!tbody) return;
 
@@ -597,7 +705,16 @@
             if (students.length === 0) {
                 if (tableContainer) tableContainer.classList.add('d-none');
                 if (paginationSection) paginationSection.classList.add('d-none');
-                if (emptyState) emptyState.classList.remove('d-none');
+                if (emptyState) {
+                    emptyState.classList.remove('d-none');
+                    if (emptyStateMessage) {
+                        if (currentSearch) {
+                            emptyStateMessage.innerHTML = `No students found matching "<strong>${escapeHtml(currentSearch)}</strong>". Try a different search term.`;
+                        } else {
+                            emptyStateMessage.innerHTML = 'There are no students in the database yet.';
+                        }
+                    }
+                }
                 return;
             }
 
@@ -606,10 +723,9 @@
             if (emptyState) emptyState.classList.add('d-none');
 
             students.forEach((student, index) => {
-                // Calculate row number based on pagination
                 const rowNumber = ((currentPage - 1) * rowsPerPage) + index + 1;
-
                 const isActive = student.is_active;
+                
                 const statusBadge = isActive ?
                     '<span class="badge bg-success rounded-pill"><i class="fas fa-circle me-1"></i>Active</span>' :
                     '<span class="badge bg-secondary rounded-pill"><i class="fas fa-circle me-1"></i>Inactive</span>';
@@ -619,86 +735,82 @@
                     '<i class="fas fa-mars text-primary"></i>' :
                     gender === 'female' ?
                         '<i class="fas fa-venus text-pink"></i>' :
-                        gender === 'other' ?
-                            '<i class="fas fa-genderless text-muted"></i>' :
-                            '<i class="fas fa-question text-secondary"></i>';
+                        '<i class="fas fa-genderless text-muted"></i>';
 
-                // Determine class type (online/offline)
                 const classType = student.class_type || 'offline';
                 const typeBadge = classType === 'online' ?
                     '<span class="badge bg-info rounded-pill"><i class="fas fa-globe me-1"></i>Online</span>' :
                     '<span class="badge bg-secondary rounded-pill"><i class="fas fa-building me-1"></i>Offline</span>';
 
-                // Use placeholder icon if img_url is null or invalid
                 const avatarContent = student.img_url && isValidImageUrl(student.img_url) ?
                     `<img src="${student.img_url}" alt="${student.initial_name}" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">` :
-                    `<div class="avatar-sm bg-primary bg-gradient rounded-circle text-white d-flex align-items-center justify-content-center">
-                            <span class="fw-bold">${student.full_name ? student.initial_name.charAt(0) : ''}${student.full_name ? student.initial_name.charAt(0) : ''}</span>
-                        </div>`;
+                    `<div class="avatar-sm bg-primary bg-gradient rounded-circle text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <span class="fw-bold">${student.initial_name ? student.initial_name.charAt(0).toUpperCase() : '?'}</span>
+                    </div>`;
 
                 const row = `
-                        <tr class="align-middle">
-                            <td class="text-center fw-bold text-muted">${rowNumber}</td>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    ${avatarContent}
-                                    <div class="ms-3">
-                                        <h6 class="mb-0 fw-bold">${student.initial_name || ''}</h6>
-                                        <small class="text-muted">${student.custom_id || 'No ID'}</small>
-                                    </div>
+                    <tr class="align-middle">
+                        <td class="text-center fw-bold text-muted">${rowNumber}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                ${avatarContent}
+                                <div class="ms-3">
+                                    <h6 class="mb-0 fw-bold">${escapeHtml(student.initial_name || '')} ${escapeHtml(student.lname || '')}</h6>
+                                    <small class="text-muted">${escapeHtml(student.custom_id || 'No ID')}</small>
                                 </div>
-                            </td>
-                            <td>
+                            </div>
+                        </td>
+                        <td>
+                            <div>
+                                <div class="mb-1">
+                                    <i class="fas fa-envelope text-muted me-2"></i>
+                                    <small>${escapeHtml(student.email || 'No email')}</small>
+                                </div>
                                 <div>
-                                    <div class="mb-1">
-                                        <i class="fas fa-envelope text-muted me-2"></i>
-                                        <small>${student.email || 'No email'}</small>
-                                    </div>
-                                    <div>
-                                        <i class="fas fa-phone text-muted me-2"></i>
-                                        <small>${student.mobile || 'No phone'}</small>
-                                    </div>
+                                    <i class="fas fa-phone text-muted me-2"></i>
+                                    <small>${escapeHtml(student.mobile || 'No phone')}</small>
                                 </div>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-light text-dark border">
-                                    <i class="fas fa-graduation-cap me-1 text-primary"></i>
-                                    ${student.grade ? student.grade.grade_name : 'N/A'}
-                                </span>
-                            </td>
-                            <td class="text-center">
-                                <span class="fs-5">${genderIcon}</span>
-                            </td>
-                            <td class="text-center">
-                                ${typeBadge}
-                            </td>
-                            <td class="text-center">
-                                ${statusBadge}
-                            </td>
-                            <td class="text-center">
-                                <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-primary rounded-start" title="View" 
-                                            onclick="viewStudent('${student.id}')">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                    <button class="btn btn-outline-warning" title="Edit" 
-                                            onclick="editStudent('${student.id}')">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    ${isActive ?
-                        `<button class="btn btn-outline-danger rounded-end" title="Deactivate" 
-                                                onclick="showDeactivateModal(${student.id}, '${escapeHtml(student.full_name)} ${escapeHtml(student.lname)}', '${escapeHtml(student.email || 'No email')}')">
-                                            <i class="fas fa-user-slash"></i>
-                                        </button>` :
-                        `<button class="btn btn-outline-success rounded-end" title="Activate" 
-                                                onclick="showActivateModal(${student.id}, '${escapeHtml(student.initial_name)} ${escapeHtml(student.lname)}', '${escapeHtml(student.email || 'No email')}')">
-                                            <i class="fas fa-user-check"></i>
-                                        </button>`
-                    }
-                                </div>
-                            </td>
-                        </tr>
-                    `;
+                            </div>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">
+                                <i class="fas fa-graduation-cap me-1 text-primary"></i>
+                                ${student.grade ? escapeHtml(student.grade.grade_name) : 'N/A'}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="fs-5">${genderIcon}</span>
+                        </td>
+                        <td class="text-center">
+                            ${typeBadge}
+                        </td>
+                        <td class="text-center">
+                            ${statusBadge}
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary rounded-start" title="View" 
+                                        onclick="viewStudent('${student.id}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-warning" title="Edit" 
+                                        onclick="editStudent('${student.id}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${isActive ?
+                                    `<button class="btn btn-outline-danger rounded-end" title="Deactivate" 
+                                            onclick="showDeactivateModal(${student.id}, '${escapeHtml(student.full_name)} ${escapeHtml(student.lname)}', '${escapeHtml(student.email || 'No email')}')">
+                                        <i class="fas fa-user-slash"></i>
+                                    </button>` :
+                                    `<button class="btn btn-outline-success rounded-end" title="Activate" 
+                                            onclick="showActivateModal(${student.id}, '${escapeHtml(student.initial_name)} ${escapeHtml(student.lname)}', '${escapeHtml(student.email || 'No email')}')">
+                                        <i class="fas fa-user-check"></i>
+                                    </button>`
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                `;
                 tbody.innerHTML += row;
             });
         }
@@ -707,13 +819,9 @@
             const startRecord = totalRecords > 0 ? ((currentPage - 1) * rowsPerPage) + 1 : 0;
             const endRecord = Math.min(currentPage * rowsPerPage, totalRecords);
 
-            const startRecordEl = document.getElementById('startRecord');
-            const endRecordEl = document.getElementById('endRecord');
-            const totalRecordsEl = document.getElementById('totalRecords');
-
-            if (startRecordEl) startRecordEl.textContent = startRecord;
-            if (endRecordEl) endRecordEl.textContent = endRecord;
-            if (totalRecordsEl) totalRecordsEl.textContent = totalRecords;
+            document.getElementById('startRecord').textContent = startRecord;
+            document.getElementById('endRecord').textContent = endRecord;
+            document.getElementById('totalRecords').textContent = totalRecords;
 
             renderPaginationLinks();
         }
@@ -727,11 +835,7 @@
             // Previous button
             const prevLi = document.createElement('li');
             prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
-            prevLi.innerHTML = `
-                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;" aria-label="Previous">
-                        <span aria-hidden="true">Previous</span>
-                    </a>
-                `;
+            prevLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">Previous</a>`;
             paginationLinks.appendChild(prevLi);
 
             // Page numbers
@@ -753,72 +857,45 @@
             // Next button
             const nextLi = document.createElement('li');
             nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
-            nextLi.innerHTML = `
-                    <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;" aria-label="Next">
-                        <span aria-hidden="true">Next</span>
-                    </a>
-                `;
+            nextLi.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">Next</a>`;
             paginationLinks.appendChild(nextLi);
         }
 
         function changePage(page) {
             if (page < 1 || page > totalPages) return;
+            currentPage = page;
             loadStudents(page);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function updateStatistics(students) {
-            // Counts from current page data only
             const activeStudents = students.filter(s => s.is_active).length;
             const inactiveStudents = students.filter(s => !s.is_active).length;
             const notPaidStudents = students.filter(s => s.admission == 0).length;
 
-            // Elements
-            const totalStudentsEl = document.getElementById('totalStudents');
-            const activeStudentsEl = document.getElementById('activeStudents');
-            const inactiveStudentsEl = document.getElementById('inactiveStudents');
-            const notPaidStudentsEl = document.getElementById('notPaidStudents');
-
-            if (totalStudentsEl) totalStudentsEl.textContent = totalRecords; // Use total from pagination
-            if (activeStudentsEl) activeStudentsEl.textContent = activeStudents;
-            if (inactiveStudentsEl) inactiveStudentsEl.textContent = inactiveStudents;
-            if (notPaidStudentsEl) notPaidStudentsEl.textContent = notPaidStudents;
+            document.getElementById('totalStudents').textContent = totalRecords;
+            document.getElementById('activeStudents').textContent = activeStudents;
+            document.getElementById('inactiveStudents').textContent = inactiveStudents;
+            document.getElementById('notPaidStudents').textContent = notPaidStudents;
         }
 
         function showActivateModal(studentId, studentName, studentEmail) {
-            const activateStudentName = document.getElementById('activateStudentName');
-            const activateStudentEmail = document.getElementById('activateStudentEmail');
-            const confirmActivateBtn = document.getElementById('confirmActivateBtn');
-
-            if (activateStudentName) activateStudentName.textContent = studentName;
-            if (activateStudentEmail) activateStudentEmail.textContent = studentEmail;
-
-            const modal = new bootstrap.Modal(document.getElementById('activateStudentModal'));
-            modal.show();
-
-            // Store student ID for the confirm action
-            if (confirmActivateBtn) confirmActivateBtn.setAttribute('data-student-id', studentId);
+            document.getElementById('activateStudentName').textContent = studentName;
+            document.getElementById('activateStudentEmail').textContent = studentEmail;
+            document.getElementById('confirmActivateBtn').setAttribute('data-student-id', studentId);
+            new bootstrap.Modal(document.getElementById('activateStudentModal')).show();
         }
 
         function showDeactivateModal(studentId, studentName, studentEmail) {
-            const deactivateStudentName = document.getElementById('deactivateStudentName');
-            const deactivateStudentEmail = document.getElementById('deactivateStudentEmail');
-            const confirmDeactivateBtn = document.getElementById('confirmDeactivateBtn');
-
-            if (deactivateStudentName) deactivateStudentName.textContent = studentName;
-            if (deactivateStudentEmail) deactivateStudentEmail.textContent = studentEmail;
-
-            const modal = new bootstrap.Modal(document.getElementById('deactivateStudentModal'));
-            modal.show();
-
-            // Store student ID for the confirm action
-            if (confirmDeactivateBtn) confirmDeactivateBtn.setAttribute('data-student-id', studentId);
+            document.getElementById('deactivateStudentName').textContent = studentName;
+            document.getElementById('deactivateStudentEmail').textContent = studentEmail;
+            document.getElementById('confirmDeactivateBtn').setAttribute('data-student-id', studentId);
+            new bootstrap.Modal(document.getElementById('deactivateStudentModal')).show();
         }
 
         function confirmActivateStudent() {
-            const confirmActivateBtn = document.getElementById('confirmActivateBtn');
-            if (!confirmActivateBtn) return;
-
-            const studentId = confirmActivateBtn.getAttribute('data-student-id');
+            const btn = document.getElementById('confirmActivateBtn');
+            const studentId = btn.getAttribute('data-student-id');
 
             fetch(`/api/students/${studentId}/reactivate`, {
                 method: 'PUT',
@@ -827,31 +904,25 @@
                     'Content-Type': 'application/json'
                 }
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        // Close modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('activateStudentModal'));
-                        if (modal) modal.hide();
-
-                        // Show success message and reload
-                        showAlert('Student activated successfully!', 'success');
-                        loadStudents(currentPage);
-                    } else {
-                        throw new Error(data.message || 'Failed to activate student');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error activating student:', error);
-                    showAlert('Error activating student: ' + error.message, 'danger');
-                });
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    bootstrap.Modal.getInstance(document.getElementById('activateStudentModal')).hide();
+                    showAlert('Student activated successfully!', 'success');
+                    loadStudents(currentPage);
+                } else {
+                    throw new Error(data.message || 'Failed to activate student');
+                }
+            })
+            .catch(error => {
+                console.error('Error activating student:', error);
+                showAlert('Error activating student: ' + error.message, 'danger');
+            });
         }
 
         function confirmDeactivateStudent() {
-            const confirmDeactivateBtn = document.getElementById('confirmDeactivateBtn');
-            if (!confirmDeactivateBtn) return;
-
-            const studentId = confirmDeactivateBtn.getAttribute('data-student-id');
+            const btn = document.getElementById('confirmDeactivateBtn');
+            const studentId = btn.getAttribute('data-student-id');
 
             fetch(`/api/students/${studentId}`, {
                 method: 'DELETE',
@@ -861,24 +932,20 @@
                     'Accept': 'application/json'
                 }
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        // Close modal
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('deactivateStudentModal'));
-                        if (modal) modal.hide();
-
-                        // Show success message and reload
-                        showAlert('Student deactivated successfully!', 'success');
-                        loadStudents(currentPage);
-                    } else {
-                        throw new Error(data.message || 'Failed to deactivate student');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error deactivating student:', error);
-                    showAlert('Error deactivating student: ' + error.message, 'danger');
-                });
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    bootstrap.Modal.getInstance(document.getElementById('deactivateStudentModal')).hide();
+                    showAlert('Student deactivated successfully!', 'success');
+                    loadStudents(currentPage);
+                } else {
+                    throw new Error(data.message || 'Failed to deactivate student');
+                }
+            })
+            .catch(error => {
+                console.error('Error deactivating student:', error);
+                showAlert('Error deactivating student: ' + error.message, 'danger');
+            });
         }
 
         function viewStudent(studentId) {
@@ -889,59 +956,8 @@
             window.location.href = `/students/${studentId}/edit`;
         }
 
-        // Helper functions
-        function showLoadingState() {
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const actionBar = document.getElementById('actionBar');
-            const studentsTableContainer = document.getElementById('studentsTableContainer');
-            const paginationSection = document.getElementById('paginationSection');
-            const emptyState = document.getElementById('emptyState');
-            const errorMessage = document.getElementById('errorMessage');
-
-            if (loadingSpinner) loadingSpinner.classList.remove('d-none');
-            if (actionBar) actionBar.classList.add('d-none');
-            if (studentsTableContainer) studentsTableContainer.classList.add('d-none');
-            if (paginationSection) paginationSection.classList.add('d-none');
-            if (emptyState) emptyState.classList.add('d-none');
-            if (errorMessage) errorMessage.classList.add('d-none');
-        }
-
-        function showContentState() {
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const actionBar = document.getElementById('actionBar');
-
-            if (loadingSpinner) loadingSpinner.classList.add('d-none');
-            if (actionBar) actionBar.classList.remove('d-none');
-        }
-
-        function showErrorState(message) {
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const errorMessage = document.getElementById('errorMessage');
-            const errorText = document.getElementById('errorText');
-
-            if (loadingSpinner) loadingSpinner.classList.add('d-none');
-            if (errorMessage) errorMessage.classList.remove('d-none');
-            if (errorText) errorText.textContent = message;
-        }
-
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
         function isValidImageUrl(url) {
-            return url &&
-                typeof url === 'string' &&
-                url.length > 0 &&
-                !url.includes('undefined') &&
-                !url.includes('null');
+            return url && typeof url === 'string' && url.length > 0 && !url.includes('undefined') && !url.includes('null');
         }
 
         function escapeHtml(unsafe) {
@@ -956,22 +972,17 @@
 
         function showAlert(message, type) {
             const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
             alertDiv.innerHTML = `
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-
-            const container = document.querySelector('.container') || document.querySelector('.card-body');
-            if (container) {
-                container.insertBefore(alertDiv, container.firstChild);
-
-                setTimeout(() => {
-                    if (alertDiv.parentNode) {
-                        alertDiv.remove();
-                    }
-                }, 5000);
-            }
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
+            setTimeout(() => {
+                if (alertDiv.parentNode) alertDiv.remove();
+            }, 5000);
         }
     </script>
 @endpush
