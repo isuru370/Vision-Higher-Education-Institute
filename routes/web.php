@@ -273,7 +273,7 @@ Route::middleware(['auth', 'check.permission'])->group(function () {
         Route::get('/view/{teacherId}', [TeacherPaymentsController::class, 'viewPage'])->name('view');
         Route::get('/salary-slip/{teacherId}/{yearMonth}', [TeacherPaymentsController::class, 'showSalarySlip'])->name('salary-slip-exact');
 
-        
+
         Route::get('/daily', [TeacherPaymentsController::class, 'fetchTeacherPaymentsDaily']);
         Route::get('/weekly', [TeacherPaymentsController::class, 'fetchTeacherPaymentsWeekly']);
 
@@ -292,11 +292,33 @@ Route::middleware(['auth', 'check.permission'])->group(function () {
 
     // Other Pages
     Route::get('/classes', [DashboardController::class, 'classes'])->name('classes');
+
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('/', [ReportController::class, 'indexPage'])->name('index');
+
         Route::get('/daily-pdf/{day}', [ReportController::class, 'downloadDailyReportPdf'])
             ->name('daily.pdf');
+
+        Route::get('/institute/monthly/{yearMonth}', [ReportController::class, 'getInstituteMonthlyReport'])
+            ->name('institute.monthly');
+
+        Route::get('/institute/daily/{date}', [ReportController::class, 'getInstituteDailyReport'])
+            ->name('institute.daily');
+
+        Route::post('/institute/range', [ReportController::class, 'getInstituteDateRangeReport'])
+            ->name('institute.range');
+
+        Route::get('/institute/monthly-pdf/{yearMonth}', [ReportController::class, 'downloadInstituteMonthlyReportPdf'])
+            ->name('institute.monthly.pdf');
+
+        Route::get('/institute/daily-pdf/{date}', [ReportController::class, 'downloadInstituteDailyReportPdf'])
+            ->name('institute.daily.pdf');
+
+        Route::get('/institute/range-pdf', [ReportController::class, 'downloadInstituteDateRangeReportPdf'])
+            ->name('institute.range.pdf');
     });
+
+
     Route::prefix('settings')->name('settings.')->group(function () {
         Route::get('/', [SettingsCodeController::class, 'indexPage'])->name('index');
     });

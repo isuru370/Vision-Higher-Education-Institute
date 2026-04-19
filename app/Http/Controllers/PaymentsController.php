@@ -41,6 +41,11 @@ class PaymentsController extends Controller
         return $this->paymentService->updatePayment($request, $id);
     }
 
+     public function fetchTodayPayments()
+    {
+        return $this->paymentService->fetchTodayPayments();
+    }
+
     public function getPaymentsByDate($date)
     {
         return $this->paymentService->getPaymentsByDate($date);

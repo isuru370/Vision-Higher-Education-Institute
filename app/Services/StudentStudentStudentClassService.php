@@ -300,10 +300,13 @@ class StudentStudentStudentClassService
                         'default_fee' => $item->default_fee,
                         'final_fee' => $item->final_fee,
                         'fee_type' => $item->fee_type,
+                        'created_at' => $item->created_at ? $item->created_at->toISOString() : null,
+                        'enrollment_date' => $item->created_at ? $item->created_at->format('Y-m-d') : null,
 
                         'student' => [
                             'id' => optional($item->student)->id,
                             'custom_id' => optional($item->student)->custom_id,
+                            'temporary_qr_code' =>optional($item->student)->temporary_qr_code,
                             'full_name' => optional($item->student)->full_name,
                             'initial_name' => optional($item->student)->initial_name,
                             'guardian_mobile' => optional($item->student)->guardian_mobile,
@@ -318,7 +321,7 @@ class StudentStudentStudentClassService
 
                         'teacher' => [
                             'id' => optional(optional($item->studentClass)->teacher)->id,
-                            'teacher_name' => optional(optional($item->studentClass)->teacher)->teacher_name,
+                            'teacher_name' => optional(optional($item->studentClass)->teacher)->fname . ' ' . optional(optional($item->studentClass)->teacher)->lname,
                         ],
 
                         'subject' => [
@@ -859,39 +862,117 @@ class StudentStudentStudentClassService
         }
     }
 
-    public function updateStudentClass(Request $request, $id)
+    public function updateSingleStudentClass(Request $request, $id)
     {
-        $studentClass = StudentStudentStudentClass::findOrFail($id);
+        try {
+            DB::beginTransaction();
 
-        $validated = $request->validate([
-            'is_free_card' => 'nullable|boolean',
-            'custom_fee' => 'nullable|numeric|min:0',
-            'discount_percentage' => 'nullable|numeric|min:0|max:100',
-            'discount_type' => 'nullable|string|max:255',
-        ]);
+            $validated = $request->validate([
+                'class_category_has_student_class_id' => 'required|integer|exists:class_category_has_student_class,id',
+                'status' => 'nullable|boolean',
+                'is_free_card' => 'nullable|boolean',
+                'custom_fee' => 'nullable|numeric|min:0',
+                'discount_percentage' => 'nullable|numeric|min:0|max:100',
+                'discount_type' => 'nullable|string|max:255',
+            ]);
 
-        if ($request->has('is_free_card')) {
-            $studentClass->is_free_card = $request->is_free_card;
+            $record = StudentStudentStudentClass::findOrFail($id);
+
+            $studentId = $record->student_id;
+            $studentClassID = $record->student_classes_id;
+            $categoryID = (int) $validated['class_category_has_student_class_id'];
+
+            $status = array_key_exists('status', $validated)
+                ? (bool) $validated['status']
+                : $record->status;
+
+            $isFreeCard = array_key_exists('is_free_card', $validated)
+                ? (bool) $validated['is_free_card']
+                : $record->is_free_card;
+
+            $customFee = $validated['custom_fee'] ?? null;
+            $discountPercentage = $validated['discount_percentage'] ?? null;
+            $discountType = $validated['discount_type'] ?? null;
+
+            // 🔹 Check category belongs to class
+            $categoryLink = ClassCategoryHasStudentClass::findOrFail($categoryID);
+
+            if ((int) $categoryLink->student_classes_id !== $studentClassID) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Selected category does not belong to the selected class.'
+                ], 422);
+            }
+
+            // 🔹 Business rules
+            if ($isFreeCard) {
+                $customFee = null;
+                $discountPercentage = null;
+                $discountType = $discountType ?: 'free_card';
+            }
+
+            if (!$isFreeCard && !is_null($customFee) && !is_null($discountPercentage)) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'custom_fee and discount_percentage cannot both be set.'
+                ], 422);
+            }
+
+            if (
+                !$isFreeCard &&
+                is_null($customFee) &&
+                !is_null($discountPercentage) &&
+                is_null($discountType) &&
+                (float) $discountPercentage === 50.0
+            ) {
+                $discountType = 'half_card';
+            }
+
+            // 🔹 Duplicate check (exclude current record)
+            $existingRecord = StudentStudentStudentClass::where([
+                'student_id' => $studentId,
+                'student_classes_id' => $studentClassID,
+                'class_category_has_student_class_id' => $categoryID,
+            ])->where('id', '!=', $id)->first();
+
+            if ($existingRecord) {
+                DB::rollBack();
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'duplicate entry',
+                ], 409);
+            }
+
+            // 🔹 Update
+            $record->update([
+                'class_category_has_student_class_id' => $categoryID,
+                'status' => $status,
+                'is_free_card' => $isFreeCard,
+                'custom_fee' => $customFee,
+                'discount_percentage' => $discountPercentage,
+                'discount_type' => $discountType,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Record updated successfully',
+                'data' => $record->fresh()
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update record',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        if ($request->exists('custom_fee')) {
-            $studentClass->custom_fee = $request->custom_fee;
-        }
-
-        if ($request->exists('discount_percentage')) {
-            $studentClass->discount_percentage = $request->discount_percentage;
-        }
-
-        if ($request->exists('discount_type')) {
-            $studentClass->discount_type = $request->discount_type;
-        }
-
-        $studentClass->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Student class updated successfully',
-            'data' => $studentClass
-        ], 200);
     }
 }

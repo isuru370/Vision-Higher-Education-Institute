@@ -95,6 +95,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Students
     Route::prefix('students')->group(function () {
+        Route::get('/all', [StudentController::class, 'fetchAllStudents']);
         Route::get('/custom_ids', [StudentController::class, 'fetchAllStudentCustomIDs']);
         Route::get('/active', [StudentController::class, 'fetchActiveStudents']);
         Route::get('/temp_qr', [StudentController::class, 'fetchTempQrCode']);
@@ -376,6 +377,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('payments')->group(function () {
         Route::post('/', [PaymentsController::class, 'storePayment']);
         Route::post('/bulk', [PaymentsController::class, 'storeBulkPayments']);
+        Route::get('/today', [PaymentsController::class, 'fetchTodayPayments']);
         Route::get('/by-date/{date}', [PaymentsController::class, 'getPaymentsByDate']);
         Route::get('/receipt/{payment_id}', [PaymentsController::class, 'receiptPrint']);
         Route::get('/mobile', [PaymentsController::class, 'mobileReadStudentPayment']); // ✅ fixed

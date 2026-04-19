@@ -42,6 +42,7 @@ class StudentService
                     $query->where('full_name', 'like', "%{$search}%")
                         ->orWhere('initial_name', 'like', "%{$search}%")
                         ->orWhere('custom_id', 'like', "%{$search}%")
+                        ->orWhere('temporary_qr_code', 'like', "%{$search}%")
                         ->orWhere('mobile', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
                         ->orWhereHas('grade', function ($gradeQuery) use ($search) {
@@ -85,6 +86,46 @@ class StudentService
         }
     }
 
+
+    public function fetchAllStudents(Request $request)
+    {
+        try {
+            $search = $request->search;
+
+            $studentsQuery = Student::with([
+                'grade' => function ($query) {
+                    $query->select('id', 'grade_name');
+                },
+            ])->orderBy('id', 'desc');
+
+            if (!empty($search)) {
+                $studentsQuery->where(function ($query) use ($search) {
+                    $query->where('full_name', 'like', "%{$search}%")
+                        ->orWhere('initial_name', 'like', "%{$search}%")
+                        ->orWhere('custom_id', 'like', "%{$search}%")
+                        ->orWhere('temporary_qr_code', 'like', "%{$search}%")
+                        ->orWhere('mobile', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhereHas('grade', function ($gradeQuery) use ($search) {
+                            $gradeQuery->where('grade_name', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            $students = $studentsQuery->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $students
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch students',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 
     // Optional: Get only active student
