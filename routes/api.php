@@ -102,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/filter-by-date', [StudentController::class, 'filterByCreatedDate']);
         Route::post('/admission', [StudentController::class, 'fetchNotPaidAdmissionStudent']);
         Route::post('/custom_id', [StudentController::class, 'generateCustomIdAPI']);
+        Route::post('/student_images', [StudentController::class, 'allImagesApi']);
         Route::get('/search', [StudentController::class, 'fetchStudentCustomId']);
         Route::post('/update_image/{customId}', [StudentController::class, 'updateStudentImage']);
         Route::get('/analytics/{id}', [StudentController::class, 'analytics']);

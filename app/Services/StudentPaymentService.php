@@ -182,7 +182,9 @@ class StudentPaymentService
 
                     'student' => [
                         'id' => optional($studentClassModel->student)->id,
-                        'custom_id' => optional($studentClassModel->student)->custom_id,
+                        'custom_id' => optional($studentClassModel->student)->permanent_qr_active == 1
+                            ? optional($studentClassModel->student)->custom_id
+                            : optional($studentClassModel->student)->temporary_qr_code,
                         'first_name' => optional($studentClassModel->student)->full_name,
                         'last_name' => optional($studentClassModel->student)->initial_name,
                         'guardian_mobile' => optional($studentClassModel->student)->guardian_mobile,

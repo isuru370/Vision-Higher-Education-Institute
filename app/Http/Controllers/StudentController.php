@@ -144,6 +144,7 @@ class StudentController extends Controller
             if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
                     $q->where('custom_id', 'like', "%{$search}%")
+                        ->orWhere('temporary_qr_code', 'like', "%{$search}%")
                         ->orWhere('full_name', 'like', "%{$search}%")
                         ->orWhere('initial_name', 'like', "%{$search}%")
                         ->orWhereRaw("CONCAT(full_name,' ',initial_name) LIKE ?", ["%{$search}%"]);
@@ -154,6 +155,13 @@ class StudentController extends Controller
 
             // Transform image URLs
             foreach ($students as $student) {
+
+                // QR logic apply karala custom_id replace karanawa
+                if ($student->permanent_qr_active == 0) {
+                    $student->custom_id = $student->temporary_qr_code;
+                }
+
+                // image logic (already thiyena eka)
                 if (
                     !empty($student->img_url) &&
                     !Str::startsWith($student->img_url, ['http://', 'https://'])
@@ -173,6 +181,62 @@ class StudentController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()
                 ->with('error', 'Failed to load student images: ' . $e->getMessage());
+        }
+    }
+
+    public function allImagesApi(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 12);
+            $search = $request->input('search', '');
+
+            $query = Student::with(['grade:id,grade_name'])
+                ->where('is_active', 1)
+                ->orderBy('created_at', 'desc');
+
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('custom_id', 'like', "%{$search}%")
+                        ->orWhere('temporary_qr_code', 'like', "%{$search}%")
+                        ->orWhere('full_name', 'like', "%{$search}%")
+                        ->orWhere('initial_name', 'like', "%{$search}%");
+                });
+            }
+
+            $students = $query->paginate($perPage);
+
+            $students->getCollection()->transform(function ($student) {
+
+                $displayId = $student->permanent_qr_active == 1
+                    ? $student->custom_id
+                    : $student->temporary_qr_code;
+
+                $imageUrl = $student->img_url;
+
+                if (!empty($imageUrl) && !Str::startsWith($imageUrl, ['http://', 'https://'])) {
+                    $imageUrl = Str::startsWith($imageUrl, 'uploads/')
+                        ? asset($imageUrl)
+                        : asset('uploads/' . $imageUrl);
+                }
+
+                return [
+                    'id' => $student->id,
+                    'custom_id' => $displayId,
+                    'name' => trim($student->initial_name),
+                    'img_url' => $imageUrl,
+                    'grade' => $student->grade->grade_name ?? null,
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $students->items()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to load students'
+            ], 500);
         }
     }
 
