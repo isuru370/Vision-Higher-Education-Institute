@@ -187,7 +187,6 @@ class StudentController extends Controller
     public function allImagesApi(Request $request)
     {
         try {
-            $perPage = $request->input('per_page', 12);
             $search = $request->input('search', '');
 
             $query = Student::with(['grade:id,grade_name'])
@@ -203,9 +202,10 @@ class StudentController extends Controller
                 });
             }
 
-            $students = $query->paginate($perPage);
+            // ❌ paginate() අයින් කරලා
+            $students = $query->get();
 
-            $students->getCollection()->transform(function ($student) {
+            $students = $students->map(function ($student) {
 
                 $displayId = $student->permanent_qr_active == 1
                     ? $student->custom_id
@@ -230,7 +230,7 @@ class StudentController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $students->items()
+                'data' => $students
             ]);
         } catch (\Exception $e) {
             return response()->json([
