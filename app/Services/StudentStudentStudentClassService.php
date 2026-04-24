@@ -306,7 +306,7 @@ class StudentStudentStudentClassService
                         'student' => [
                             'id' => optional($item->student)->id,
                             'custom_id' => optional($item->student)->custom_id,
-                            'temporary_qr_code' =>optional($item->student)->temporary_qr_code,
+                            'temporary_qr_code' => optional($item->student)->temporary_qr_code,
                             'full_name' => optional($item->student)->full_name,
                             'initial_name' => optional($item->student)->initial_name,
                             'guardian_mobile' => optional($item->student)->guardian_mobile,
@@ -890,9 +890,17 @@ class StudentStudentStudentClassService
                 ? (bool) $validated['is_free_card']
                 : $record->is_free_card;
 
-            $customFee = $validated['custom_fee'] ?? null;
-            $discountPercentage = $validated['discount_percentage'] ?? null;
-            $discountType = $validated['discount_type'] ?? null;
+            $customFee = array_key_exists('custom_fee', $validated)
+                ? $validated['custom_fee']
+                : $record->custom_fee;
+
+            $discountPercentage = array_key_exists('discount_percentage', $validated)
+                ? $validated['discount_percentage']
+                : $record->discount_percentage;
+
+            $discountType = array_key_exists('discount_type', $validated)
+                ? $validated['discount_type']
+                : $record->discount_type;
 
             // 🔹 Check category belongs to class
             $categoryLink = ClassCategoryHasStudentClass::findOrFail($categoryID);

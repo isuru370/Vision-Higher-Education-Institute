@@ -707,27 +707,33 @@ class StudentService
     public function updateStudentImage(Request $request, $custom_id)
     {
         DB::beginTransaction();
+
         try {
-            // ✔ Find by custom_id
-            $student = Student::where('custom_id', $custom_id)->first();
+            // ✅ SA or TMP දෙකෙන්ම find කරනවා
+            $student = Student::where('custom_id', $custom_id)
+                ->orWhere('temporary_qr_code', $custom_id)
+                ->first();
+
             if (!$student) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Student not found'
                 ], 404);
             }
-            // -------------------------
+
             // VALIDATION
-            // -------------------------
             $validated = $request->validate([
                 'img_url' => 'required|string|max:255',
             ]);
-            // -------------------------
-            // UPDATE IMAGE
-            // -------------------------
+
+            // UPDATE STUDENT IMAGE
             $student->update([
                 'img_url' => $validated['img_url']
             ]);
+
+            // 🔥 QUICK PHOTO DEACTIVATE
+            QuickPhoto::where('quick_img', $validated['img_url'])
+                ->update(['is_active' => 0]);
 
             DB::commit();
 

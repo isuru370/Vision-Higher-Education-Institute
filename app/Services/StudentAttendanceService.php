@@ -120,6 +120,8 @@ class StudentAttendanceService
 
         $enrollments = StudentStudentStudentClass::with([
             'studentClass',
+            'studentClass.grade',
+            'studentClass.teacher',
             'student',
             'classCategoryHasStudentClass.classCategory'
         ])
@@ -238,10 +240,21 @@ class StudentAttendanceService
                     'student' => [
                         'id' => $student_id,
                         'img_url' => $student->img_url ?? null,
-                        'custom_id' => $student->custom_id ?? null,
+                        'custom_id' => $student->permanent_qr_active == 1
+                            ? $student->custom_id
+                            : $student->temporary_qr_code,
                         'first_name' => $student->full_name ?? null,
                         'last_name' => $student->initial_name ?? null,
                         'guardian_mobile' => $student->guardian_mobile ?? null,
+                    ],
+
+                    'grade' => [
+                        'id' => $studentClass->grade->id ?? null,
+                        'grade_name' => $studentClass->grade->grade_name ?? null,
+                    ],
+                    'teacher' => [
+                        'id' => $studentClass->teacher->id ?? null,
+                        'teacher_name' => $studentClass->teacher->fname . ' ' . $studentClass->teacher->lname ?? null,
                     ],
 
                     'ongoing_class' => [
