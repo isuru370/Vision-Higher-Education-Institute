@@ -1308,7 +1308,7 @@ class TeacherPaymentsService
                 'status'
             )
                 ->with([
-                    'student:id,initial_name,custom_id,is_active',
+                    'student:id,initial_name,custom_id,temporary_qr_code,is_active',
                     'studentClass:id,class_name,teacher_percentage'
                 ])
                 ->where('status', 1)
@@ -1394,7 +1394,7 @@ class TeacherPaymentsService
                     $studentData = [
                         'student_id' => $sc->student->id,
                         'student_name' => $sc->student->initial_name,
-                        'custom_id' => $sc->student->custom_id,
+                        'custom_id' => $sc->student->permanent_qr_active == 1 ? $sc->student->custom_id : $sc->student->temporary_qr_code,
                         'class_name' => $className,
                         'payment_status' => 'free',
                         'is_free_card' => 1,
@@ -1426,7 +1426,7 @@ class TeacherPaymentsService
                         $studentData = [
                             'student_id' => $sc->student->id,
                             'student_name' => $sc->student->initial_name,
-                            'custom_id' => $sc->student->custom_id,
+                            'custom_id' => $sc->student->permanent_qr_active == 1 ? $sc->student->custom_id : $sc->student->temporary_qr_code,
                             'class_name' => $className,
                             'payment_status' => 'paid',
                             'is_free_card' => 0,
@@ -1447,7 +1447,7 @@ class TeacherPaymentsService
                     $studentData = [
                         'student_id' => $sc->student->id,
                         'student_name' => $sc->student->initial_name,
-                        'custom_id' => $sc->student->custom_id,
+                        'custom_id' => $sc->student->permanent_qr_active == 1 ? $sc->student->custom_id : $sc->student->temporary_qr_code,
                         'class_name' => $className,
                         'payment_status' => 'unpaid',
                         'is_free_card' => 0,
