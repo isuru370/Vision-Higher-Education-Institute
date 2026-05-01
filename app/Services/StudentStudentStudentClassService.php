@@ -23,20 +23,24 @@ class StudentStudentStudentClassService
             $qrCode = trim($validated['qr_code']);
             $now = Carbon::now();
 
-            // 1. Find student by QR type
-            if (str_starts_with($qrCode, 'TMP')) {
-                $student = Student::where('temporary_qr_code', $qrCode)
-                    ->where('student_disable', false)
-                    ->first();
+            // TMP හෝ SA/custom_id දෙකම එකට search කරනවා
+            $student = Student::where('student_disable', false)
+                ->where(function ($query) use ($qrCode) {
+                    $query->where('temporary_qr_code', $qrCode)
+                        ->orWhere('custom_id', $qrCode);
+                })
+                ->first();
 
-                if (!$student) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Temporary QR code invalid',
-                        'data' => []
-                    ], 404);
-                }
+            if (!$student) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'QR code invalid',
+                    'data' => []
+                ], 404);
+            }
 
+            // TMP QR නම් expired date එක විතරක් check කරනවා
+            if ($student->temporary_qr_code === $qrCode) {
                 if (
                     $student->temporary_qr_code_expire_date &&
                     $now->gt($student->temporary_qr_code_expire_date)
@@ -44,26 +48,6 @@ class StudentStudentStudentClassService
                     return response()->json([
                         'status' => 'error',
                         'message' => 'Temporary QR code expired',
-                        'data' => []
-                    ], 403);
-                }
-            } else {
-                $student = Student::where('custom_id', $qrCode)
-                    ->where('student_disable', false)
-                    ->first();
-
-                if (!$student) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'QR code invalid',
-                        'data' => []
-                    ], 404);
-                }
-
-                if (!$student->permanent_qr_active) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Permanent QR code inactive',
                         'data' => []
                     ], 403);
                 }
@@ -305,7 +289,9 @@ class StudentStudentStudentClassService
 
                         'student' => [
                             'id' => optional($item->student)->id,
-                            'custom_id' => optional($item->student)->custom_id,
+                            'custom_id' => optional($item->student)->permanent_qr_active == 1
+                                ? optional($item->student)->custom_id
+                                : optional($item->student)->temporary_qr_code,
                             'temporary_qr_code' => optional($item->student)->temporary_qr_code,
                             'full_name' => optional($item->student)->full_name,
                             'initial_name' => optional($item->student)->initial_name,
@@ -408,7 +394,9 @@ class StudentStudentStudentClassService
                         ],
 
                         'student' => [
-                            'student_custom_id' => optional($item->student)->custom_id,
+                            'student_custom_id' => optional($item->student)->permanent_qr_active == 1
+                                ? optional($item->student)->custom_id
+                                : optional($item->student)->temporary_qr_code,
                             'first_name' => optional($item->student)->full_name,
                             'last_name' => optional($item->student)->initial_name,
                             'img_url' => optional($item->student)->img_url,

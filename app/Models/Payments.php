@@ -46,4 +46,13 @@ class Payments extends Model
     {
         return $this->belongsTo(User::class, 'user_id', 'id');
     }
+
+    public function enrollment()
+    {
+        return $this->belongsTo(
+            StudentStudentStudentClass::class,
+            'student_student_student_classes_id',
+            'id'
+        );
+    }
 }

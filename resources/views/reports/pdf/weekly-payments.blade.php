@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Weekly Teacher Payments Report</title>
+    <title>Payments Report</title>
 
     <style>
         @page {
@@ -74,7 +74,7 @@
 <body>
 
     <div class="header">
-        <h2>Weekly Teacher Payments Report</h2>
+        <h2>Teacher Payments Report</h2>
         <p>From: {{ $from_date }}</p>
         <p>To: {{ $to_date }}</p>
     </div>

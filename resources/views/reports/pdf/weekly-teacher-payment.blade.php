@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Weekly Teacher Payment Report</title>
+    <title>Teacher Payment Report</title>
     <style>
         @page {
             margin: 14px 16px;
@@ -162,7 +162,7 @@
 <body>
 
     <div class="header">
-        <h2>Weekly Teacher Payment Report</h2>
+        <h2>Teacher Payment Report</h2>
         <h4>{{ $data['teacher_name'] ?? '-' }}</h4>
         <p>From: {{ $start_date ?? '-' }} | To: {{ $end_date ?? '-' }}</p>
     </div>
