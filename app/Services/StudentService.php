@@ -393,54 +393,33 @@ class StudentService
         ]);
 
         try {
-            $qrCode = $request->qr_code;
+            $qrCode = trim($request->qr_code);
             $now = Carbon::now();
 
-            // 1️⃣ Temporary QR (starts with TMP)
-            if (str_starts_with($qrCode, 'TMP')) {
-                $student = Student::with([
-                    'grade:id,grade_name',
-                    'portalLogin:id,student_id,username,is_verify,is_active'
-                ])
-                    ->where('temporary_qr_code', $qrCode)
-                    ->where('student_disable', false)
-                    ->first();
+            $student = Student::with([
+                'grade:id,grade_name',
+                'portalLogin:id,student_id,username,is_verify,is_active'
+            ])
+                ->where('student_disable', false)
+                ->where(function ($query) use ($qrCode) {
+                    $query->where('temporary_qr_code', $qrCode)
+                        ->orWhere('custom_id', $qrCode);
+                })
+                ->first();
 
-                if (!$student) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Temporary QR code invalid'
-                    ], 404);
-                }
+            if (!$student) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'QR code invalid'
+                ], 404);
+            }
 
-                // Expire check
+            // TMP QR නම් expired date එක විතරක් check කරන්න
+            if ($student->temporary_qr_code === $qrCode) {
                 if ($student->temporary_qr_code_expire_date && $now->gt($student->temporary_qr_code_expire_date)) {
                     return response()->json([
                         'status' => 'error',
                         'message' => 'Temporary QR code has expired'
-                    ], 403);
-                }
-            } else {
-                // 2️⃣ Permanent QR (custom_id)
-                $student = Student::with([
-                    'grade:id,grade_name',
-                    'portalLogin:id,student_id,username,is_verify,is_active'
-                ])
-                    ->where('custom_id', $qrCode)
-                    ->where('student_disable', false)
-                    ->first();
-
-                if (!$student) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'QR code invalid'
-                    ], 404);
-                }
-
-                if (!$student->permanent_qr_active) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Permanent QR code is inactive'
                     ], 403);
                 }
             }
@@ -458,6 +437,7 @@ class StudentService
             // Portal access info
             $hasPortalAccess = false;
             $portalUsername = null;
+
             if ($student->portalLogin) {
                 $portalLogin = $student->portalLogin;
                 $hasPortalAccess = $portalLogin->is_verify && $portalLogin->is_active;
@@ -466,6 +446,7 @@ class StudentService
 
             $studentData['has_portal_access'] = $hasPortalAccess;
             $studentData['portal_username'] = $portalUsername;
+
             if ($student->portalLogin) {
                 $studentData['portal_is_verify'] = (bool) $student->portalLogin->is_verify;
                 $studentData['portal_is_active'] = (bool) $student->portalLogin->is_active;
@@ -726,14 +707,23 @@ class StudentService
                 'img_url' => 'required|string|max:255',
             ]);
 
-            // UPDATE STUDENT IMAGE
-            $student->update([
-                'img_url' => $validated['img_url']
-            ]);
+            $oldImage = trim((string) $student->img_url);
+            $newImage = trim((string) $validated['img_url']);
 
-            // 🔥 QUICK PHOTO DEACTIVATE
-            QuickPhoto::where('quick_img', $validated['img_url'])
-                ->update(['is_active' => 0]);
+            // ✅ image එක same නම් update/deactivate කරන්න එපා
+            if ($oldImage !== $newImage) {
+
+                // UPDATE STUDENT IMAGE
+                $student->update([
+                    'img_url' => $newImage
+                ]);
+
+                // 🔥 QUICK PHOTO DEACTIVATE
+                QuickPhoto::where('quick_img', $newImage)
+                    ->update(['is_active' => 0]);
+
+                $student->refresh();
+            }
 
             DB::commit();
 

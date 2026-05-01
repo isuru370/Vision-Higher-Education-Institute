@@ -756,7 +756,7 @@
                                 ${avatarContent}
                                 <div class="ms-3">
                                     <h6 class="mb-0 fw-bold">${escapeHtml(student.initial_name || '')} ${escapeHtml(student.lname || '')}</h6>
-                                    <small class="text-muted">${escapeHtml(student.custom_id || 'No ID')}</small>
+                                    <small class="text-muted">${escapeHtml(student.permanent_qr_active == 1 ? student.custom_id : student.temporary_qr_code || 'No ID')}</small>
                                 </div>
                             </div>
                         </td>

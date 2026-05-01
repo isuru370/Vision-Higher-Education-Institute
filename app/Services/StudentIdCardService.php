@@ -12,7 +12,7 @@ class StudentIdCardService
     {
         try {
             $student = Student::where('custom_id', $customId)
-                ->select('custom_id', 'full_name', 'initial_name', 'address1', 'address2', 'address3', 'img_url', 'created_at')
+                ->select('custom_id','temporary_qr_code', 'full_name', 'initial_name', 'address1', 'address2', 'address3', 'img_url', 'created_at')
                 ->first();
 
             if (!$student) {
@@ -20,7 +20,7 @@ class StudentIdCardService
             }
 
             return [
-                'custom_id' => $student->custom_id,
+                'custom_id' => $student->permanent_qr_active == 1 ? $student->custom_id : $student->temporary_qr_code,
                 'fname' => $student->full_name,
                 'lname' => $student->initial_name,
                 'address' => trim(($student->address1 ?? '') . ' ' . ($student->address2 ?? '') . ' ' . ($student->address3 ?? '')),
@@ -49,6 +49,7 @@ class StudentIdCardService
         try {
             $query = Student::select(
                 'custom_id',
+                'temporary_qr_code',
                 'full_name',
                 'initial_name',
                 'address1',
@@ -73,7 +74,10 @@ class StudentIdCardService
 
             // Custom ID filter
             if ($searchCustomId) {
-                $query->where('custom_id', 'like', "%{$searchCustomId}%");
+                $query->where(function ($q) use ($searchCustomId) {
+                    $q->where('custom_id', 'like', "%{$searchCustomId}%")
+                        ->orWhere('temporary_qr_code', 'like', "%{$searchCustomId}%");
+                });
             }
 
             $students = $query
@@ -82,7 +86,7 @@ class StudentIdCardService
 
             $students->getCollection()->transform(function ($student) {
                 return [
-                    'custom_id' => $student->custom_id,
+                    'custom_id' => $student->permanent_qr_active == 1 ? $student->custom_id : $student->temporary_qr_code,
                     'fname' => $student->full_name,
                     'lname' => $student->initial_name,
                     'address' => trim(

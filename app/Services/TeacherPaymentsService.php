@@ -1692,7 +1692,7 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'student:id,custom_id,initial_name,full_name',
+                    'student:id,custom_id,temporary_qr_code,initial_name,full_name',
                     'studentStudentClass.studentClass.grade:id,grade_name',
                     'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
                     'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
@@ -1872,7 +1872,9 @@ class TeacherPaymentsService
 
                     $paymentDetails[] = [
                         'payment_id' => $payment->id,
-                        'student_custom_id' => optional($payment->student)->custom_id,
+                        'student_custom_id' => optional($payment->student)->permanent_qr_active == 1
+                            ? optional($payment->student)->custom_id
+                            : optional($payment->student)->temporary_qr_code,
                         'student_name' => optional($payment->student)->initial_name
                             ?? optional($payment->student)->full_name,
                         'class_name' => $className,
@@ -2002,7 +2004,7 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'student:id,custom_id,initial_name,full_name',
+                    'student:id,custom_id,temporary_qr_code,initial_name,full_name',
                     'studentStudentClass.studentClass.grade:id,grade_name',
                     'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
                     'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
@@ -2182,7 +2184,9 @@ class TeacherPaymentsService
 
                     $paymentDetails[] = [
                         'payment_id' => $payment->id,
-                        'student_custom_id' => optional($payment->student)->custom_id,
+                        'student_custom_id' => optional($payment->student)->permanent_qr_active == 1
+                            ? optional($payment->student)->custom_id
+                            : optional($payment->student)->temporary_qr_code,
                         'student_name' => optional($payment->student)->initial_name
                             ?? optional($payment->student)->full_name,
                         'class_name' => $className,
@@ -2311,7 +2315,7 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'student:id,custom_id,initial_name,full_name',
+                    'student:id,custom_id,temporary_qr_code,initial_name,full_name',
                     'studentStudentClass.studentClass.grade:id,grade_name',
                     'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
                     'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
@@ -2473,7 +2477,9 @@ class TeacherPaymentsService
 
                 $paymentDetails[] = [
                     'payment_id' => $payment->id,
-                    'student_custom_id' => optional($payment->student)->custom_id,
+                    'student_custom_id' => optional($payment->student)->permanent_qr_active == 1
+                        ? optional($payment->student)->custom_id
+                        : optional($payment->student)->temporary_qr_code,
                     'student_name' => optional($payment->student)->initial_name
                         ?? optional($payment->student)->full_name,
                     'class_name' => $className,
@@ -2609,7 +2615,7 @@ class TeacherPaymentsService
                         ->where('is_active', 1);
                 })
                 ->with([
-                    'student:id,custom_id,initial_name,full_name',
+                    'student:id,custom_id,temporary_qr_code,initial_name,full_name',
                     'studentStudentClass.studentClass.grade:id,grade_name',
                     'studentStudentClass.studentClass:id,teacher_id,class_name,teacher_percentage,grade_id',
                     'studentStudentClass.classCategoryHasStudentClass.classCategory:id,category_name',
@@ -2767,7 +2773,9 @@ class TeacherPaymentsService
 
                 $paymentDetails[] = [
                     'payment_id' => $payment->id,
-                    'student_custom_id' => optional($payment->student)->custom_id,
+                    'student_custom_id' => optional($payment->student)->permanent_qr_active == 1
+                        ? optional($payment->student)->custom_id
+                        : optional($payment->student)->temporary_qr_code,
                     'student_name' => optional($payment->student)->initial_name
                         ?? optional($payment->student)->full_name,
                     'class_name' => $className,
