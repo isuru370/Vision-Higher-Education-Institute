@@ -19,8 +19,8 @@ class SystemUsersTableSeeder extends Seeder
                 'custom_id' => 'ADM001',
                 'fname' => 'System',
                 'lname' => 'Administrator',
-                'email' => 'admin@nexorait.lk',
-                'mobile' => '0711234567',
+                'email' => '',
+                'mobile' => '',
                 'nic' => '123456789V',
                 'bday' => '1985-01-15',
                 'gender' => 'male',
@@ -100,7 +100,7 @@ class SystemUsersTableSeeder extends Seeder
             $userId = DB::table('users')->insertGetId([
                 'name' => 'System Administrator',
                 'email' => $email,
-                'password' => Hash::make('Admin@vision'), // default password
+                'password' => Hash::make('00'), // default password
                 'user_type' => $adminTypeId,
                 'is_active' => true,
                 'email_verified_at' => now(),
